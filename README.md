@@ -5,7 +5,7 @@ Vague ideas about a flight controller.
 
         import with STM32CubeIDE: File -> Import -> General -> File System
 
-The code compiles without errors, activates the DMP mode of the MPU6050, it returns the quaternion and from this I estimate the values ​​for ROLL, PITCH and YAW.
+The code compiles without errors (checkout log.txt), activates the DMP mode of the MPU6050, it returns the quaternion and from this I estimate the values ​​for ROLL, PITCH and YAW.
 For calculations use:
 
 The code is in:
