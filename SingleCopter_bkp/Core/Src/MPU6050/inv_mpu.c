@@ -791,10 +791,6 @@ int mpu_init(struct int_param_s *int_param)
         return -1;
     if (mpu_configure_fifo(0))
         return -1;
-    // TODO add this line
-    //if(set_int_enable(1))
-    //	  return -1;
-
 
     //if (int_param)
     //    reg_int_cb(int_param);

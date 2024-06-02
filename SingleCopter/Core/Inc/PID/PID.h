@@ -1,39 +1,37 @@
 #ifndef PID_CONTROLLER_H
 #define PID_CONTROLLER_H
 
+#define CLIP(value, min, max) \
+    ((value) < (min) ? (min) : ((value) > (max) ? (max) : (value)))
+
+
+// PID controller structure
 typedef struct {
-
-	/* Controller gains */
-	float Kp;
-	float Ki;
-	float Kd;
-
-	/* Derivative low-pass filter time constant */
-	float tau;
-
-	/* Output limits */
-	float limMin;
-	float limMax;
-	
-	/* Integrator limits */
-	float limMinInt;
-	float limMaxInt;
-
-	/* Sample time (in seconds) */
-	float T;
-
-	/* Controller "memory" */
-	float integrator;
-	float prevError;			/* Required for integrator */
-	float differentiator;
-	float prevMeasurement;		/* Required for differentiator */
-
-	/* Controller output */
-	float out;
+    float Kp;                  // Proportional gain
+    float Ki;                  // Integral gain
+    float Kd;                  // Derivative gain
+    float T;                   // Sampling period
+    float prev_error;          // Previous error
+    float prev_setpoint;	   //
+    float integral;            // Integral term
+    float prev_derivative;     // Derivative term
+    float min_integral_limit;  // integral limits
+    float max_integral_limit;  // integral limits
+    float min_output_limit;	   // min PID limit
+    float max_output_limit;	   // max PID limit
 
 } PIDController;
 
-void  PIDController_Init(PIDController *pid);
-float PIDController_Update(PIDController *pid, float setpoint, float measurement);
+void initializePID(PIDController *pid,
+				   float Kp,
+				   float Ki,
+				   float Kd,
+				   float T,
+				   float min_integral_limit,
+				   float max_integral_limit,
+				   float min_output_limit,
+				   float max_output_limit);
+
+float updatePID(PIDController *pid, float setpoint, float measurement, float measurement_dot);
 
 #endif

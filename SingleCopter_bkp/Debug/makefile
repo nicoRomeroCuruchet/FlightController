@@ -11,7 +11,6 @@ RM := rm -rf
 -include sources.mk
 -include Drivers/STM32F4xx_HAL_Driver/Src/subdir.mk
 -include Core/Startup/subdir.mk
--include Core/Src/Quaternion/subdir.mk
 -include Core/Src/PID/subdir.mk
 -include Core/Src/MPU6050/subdir.mk
 -include Core/Src/subdir.mk
@@ -63,8 +62,8 @@ all: main-build
 main-build: SingleCopter.elf secondary-outputs
 
 # Tool invocations
-SingleCopter.elf SingleCopter.map: $(OBJS) $(USER_OBJS) C:\Users\nicor\OneDrive\Escritorio\singlecopter\SingleCopter\STM32F401CCUX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "SingleCopter.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\nicor\OneDrive\Escritorio\singlecopter\SingleCopter\STM32F401CCUX_FLASH.ld" --specs=nosys.specs -Wl,-Map="SingleCopter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+SingleCopter.elf SingleCopter.map: $(OBJS) $(USER_OBJS) C:\Users\nicor\STM32CubeIDE\workspace_1.15.1\SingleCopter\STM32F401CCUX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "SingleCopter.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\nicor\STM32CubeIDE\workspace_1.15.1\SingleCopter\STM32F401CCUX_FLASH.ld" --specs=nosys.specs -Wl,-Map="SingleCopter.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

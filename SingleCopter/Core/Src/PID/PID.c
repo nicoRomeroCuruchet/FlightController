@@ -1,78 +1,56 @@
 #include "PID/PID.h"
 
-void PIDController_Init(PIDController *pid) {
 
-	/* Clear controller variables */
-	pid->integrator = 0.0f;
-	pid->prevError  = 0.0f;
+// Initialize the PID controller
+void initializePID(PIDController *pid,
+				   float Kp,
+				   float Ki,
+				   float Kd,
+				   float T,
+				   float min_integral_limit,
+				   float max_integral_limit,
+				   float min_output_limit,
+				   float max_output_limit) {
 
-	pid->differentiator  = 0.0f;
-	pid->prevMeasurement = 0.0f;
+    pid->Kp = Kp;
+    pid->Ki = Ki;
+    pid->Kd = Kd;
+    pid->T = T;
 
-	pid->out = 0.0f;
+    pid->prev_setpoint = 0.0f;
 
+    pid->prev_error      = 0.0f;
+    pid->prev_derivative = 0.0f;
+    pid->integral        = 0.0f;
+
+    pid->min_integral_limit = min_integral_limit;
+    pid->max_integral_limit = max_integral_limit;
+
+    pid->min_output_limit = min_output_limit;
+    pid->max_output_limit = max_output_limit;
 }
 
-float PIDController_Update(PIDController *pid, float setpoint, float measurement) {
+// Update the PID controller
+float updatePID(PIDController *pid,
+		        float setpoint,
+				float measurement,
+				float measurement_dot)
+{
+	float error = setpoint - measurement;
+    // Proportional term
+    float P = pid->Kp * error;
+    // Integral term
+    pid->integral += (pid->T / 2) * (error + pid->prev_error);
+    // constrain integral output
+    float I = CLIP(pid->Ki * pid->integral, pid->min_integral_limit, pid->max_integral_limit);
+    // Derivative term
+    float D = 2 * pid->Kd * (((setpoint - pid->prev_setpoint) / pid->T) - measurement_dot) - pid->prev_derivative;
+    // Compute the control output, constrain output
+    float output = CLIP(P + I + D, pid->min_output_limit, pid->max_output_limit);
+    // Save the current error for the next iteration, e[k-1]
+    pid->prev_error = error;
+    // Save the current error for the next iteration,  D[k-1]
+    pid->prev_derivative = D;
 
-	/*
-	* Error signal
-	*/
-    float error = setpoint - measurement;
-
-
-	/*
-	* Proportional
-	*/
-    float proportional = pid->Kp * error;
-
-
-	/*
-	* Integral
-	*/
-    pid->integrator = pid->integrator + 0.5f * pid->Ki * pid->T * (error + pid->prevError);
-
-	/* Anti-wind-up via integrator clamping */
-    if (pid->integrator > pid->limMaxInt) {
-
-        pid->integrator = pid->limMaxInt;
-
-    } else if (pid->integrator < pid->limMinInt) {
-
-        pid->integrator = pid->limMinInt;
-
-    }
-
-
-	/*
-	* Derivative (band-limited differentiator)
-	*/
-		
-    pid->differentiator = -(2.0f * pid->Kd * (measurement - pid->prevMeasurement)	/* Note: derivative on measurement, therefore minus sign in front of equation! */
-                        + (2.0f * pid->tau - pid->T) * pid->differentiator)
-                        / (2.0f * pid->tau + pid->T);
-
-
-	/*
-	* Compute output and apply limits
-	*/
-    pid->out = proportional + pid->integrator + pid->differentiator;
-
-    if (pid->out > pid->limMax) {
-
-        pid->out = pid->limMax;
-
-    } else if (pid->out < pid->limMin) {
-
-        pid->out = pid->limMin;
-
-    }
-
-	/* Store error and measurement for later use */
-    pid->prevError       = error;
-    pid->prevMeasurement = measurement;
-
-	/* Return controller output */
-    return pid->out;
-
+    return output;
 }

@@ -26,7 +26,7 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
+#define sec2milliseconds(x) x*1000
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -34,29 +34,57 @@
 #define LSB_Sensitivity 16.4
 
 /* Controller parameters */
-#define PID_KP  100.0f
-#define PID_KI  0.0f
-#define PID_KD  10.0f
 
-#define PID_TAU 0.02f
+/************************** Roll **************************/
+#define kp_roll  30.0f
+#define ki_roll  0.0f
+#define kd_roll  0.0f
 
-#define PID_LIM_MIN 1000.0f
-#define PID_LIM_MAX 2000.0f
+#define PID_LIM_MIN_INT_ROLL -50.0f
+#define PID_LIM_MAX_INT_ROLL +50.0f
 
-#define PID_LIM_MIN_INT -400.0f
-#define PID_LIM_MAX_INT  400.0f
+#define PID_LIM_MIN_ROLL -200.0f
+#define PID_LIM_MAX_ROLL +200.0f
+/**********************************************************/
 
-#define SAMPLE_TIME_S 0.005f
+/************************** Pitch **************************/
+#define kp_pitch kp_roll
+#define ki_pitch ki_roll
+#define kd_pitch kd_roll
 
+#define PID_LIM_MIN_INT_PITCH PID_LIM_MIN_INT_ROLL
+#define PID_LIM_MAX_INT_PITCH PID_LIM_MAX_INT_ROLL
+
+#define PID_LIM_MIN_PITCH PID_LIM_MIN_ROLL
+#define PID_LIM_MAX_PITCH PID_LIM_MAX_ROLL
+/**********************************************************/
+
+/************************** Yaw **************************/
+#define kp_yaw  1.0f
+#define ki_yaw  0.0f
+#define kd_yaw  0.0f
+
+#define PID_LIM_MIN_INT_YAW -100.0f
+#define PID_LIM_MAX_INT_YAW +100.0f
+
+#define PID_LIM_MIN_YAW -400.0f
+#define PID_LIM_MAX_YAW +400.0f
+/**********************************************************/
+
+#define SAMPLE_TIME_S 0.005f // 200 Hz
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
+#define DUTY_CYCLE_MOTOR_MIN 1000
+#define DUTY_CYCLE_MOTOR_MAX 2000
+#define DUTY_CYCLE_SERVO_CENTER 1500
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
+
+TIM_HandleTypeDef htim3;
 
 /* USER CODE BEGIN PV */
 extern float q0, q1, q2, q3;
@@ -65,26 +93,13 @@ extern short gyro[3];
 float gx, gy, gz;
 float gx_angle, gy_angle, gz_angle;
 uint32_t loop_timer;
-/* Initialize PID controller */
-PIDController pid_roll = {1.0, PID_KI, PID_KD,
-						  PID_TAU,
-						  -100, 100,
-						  -10, 10,
-						  SAMPLE_TIME_S};
-
-PIDController pid_roll_rate = {PID_KP, PID_KI, PID_KD,
-                               PID_TAU,
-                               PID_LIM_MIN, PID_LIM_MAX,
-						       PID_LIM_MIN_INT, PID_LIM_MAX_INT,
-                               SAMPLE_TIME_S};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
-extern void DMP_Init();
-extern void Read_DMP();
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -124,72 +139,94 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_I2C1_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
+
+  /*Initialize PWM motors and servos */
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);  /* Motor CW    */
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);  /* Motor CCW   */
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);  /* Servo Roll  */
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);  /* Servo Pitch */
+ /*turn off motors and center servos */
+  htim3.Instance->CCR1 = (uint32_t)DUTY_CYCLE_MOTOR_MIN; 	 /*  Channel 1 motor CW    */
+  htim3.Instance->CCR2 = (uint32_t)DUTY_CYCLE_MOTOR_MIN;	 /*  Channel 2 motor CCW   */
+  htim3.Instance->CCR3 = (uint32_t)DUTY_CYCLE_SERVO_CENTER;	 /*  Channel 1 motor CW    */
+  htim3.Instance->CCR4 = (uint32_t)DUTY_CYCLE_SERVO_CENTER;	 /*  Channel 2 motor CCW   */
+  /* DMP MPU initialize */
   DMP_Init();
-
-
-  PIDController_Init(&pid_roll);
-
-  float avg_gyro_x, avg_gyro_y, avg_gyro_z;
-  do
-  {
-	  avg_gyro_x=avg_gyro_y=avg_gyro_z=0;
-	  for (uint32_t i =0; i<100 ;i++)
-	  {
-		  Read_DMP();
-		  avg_gyro_x += abs((float)gyro[0]);
-		  avg_gyro_y += abs((float)gyro[1]);
-		  avg_gyro_z += abs((float)gyro[2]);
-	  }
-	  avg_gyro_x/=100;
-	  avg_gyro_y/=100;
-	  avg_gyro_z/=100;
-  }
-  while(avg_gyro_x>5 || avg_gyro_y>5 || avg_gyro_z>5);
-
-  float offset_gx=0;
-  float offset_gy=0;
-  float offset_gz=0;
-
-  for(uint32_t i=0 ; i<100; i++)
-  {
-	  Read_DMP();
-	  offset_gx+=(float)gyro[0];
-	  offset_gy+=(float)gyro[1];
-	  offset_gz+=(float)gyro[2];
-  }
-
-  offset_gx/=100;
-  offset_gy/=100;
-  offset_gz/=100;
+  // Wait 10s for calibration, don't move the IMU!
+  Calubration_DMP();
+  float gx_offset, gy_offset, gz_offset;
+  DMP_get_gyro_offsets(&gx_offset, &gy_offset, &gz_offset);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  gx_angle=gy_angle=gz_angle=0;
-  gx=gy=gz=0;
-  float setpoint_roll=.00f;
+  PIDController pid_roll, pid_pitch, pid_yaw;
+  /* PID ROLL */
+  initializePID(&pid_roll,
+		  	  	  kp_roll,
+				  ki_roll,
+				  kd_roll,
+				  SAMPLE_TIME_S,
+				  PID_LIM_MIN_INT_ROLL,
+				  PID_LIM_MAX_INT_ROLL,
+				  PID_LIM_MIN_ROLL,
+				  PID_LIM_MAX_ROLL);
+  /* PID PITCH */
+  initializePID(&pid_pitch,
+  		  	  	  kp_pitch,
+  				  ki_pitch,
+  				  kd_pitch,
+  				  SAMPLE_TIME_S,
+  				  PID_LIM_MIN_INT_PITCH,
+  				  PID_LIM_MAX_INT_PITCH,
+  				  PID_LIM_MIN_PITCH,
+  				  PID_LIM_MAX_PITCH);
+  /* PID YAW */
+  initializePID(&pid_yaw,
+				  kp_yaw,
+				  ki_yaw,
+				  kd_yaw,
+				  SAMPLE_TIME_S,
+				  PID_LIM_MIN_INT_YAW,
+				  PID_LIM_MAX_INT_YAW,
+				  PID_LIM_MIN_YAW,
+				  PID_LIM_MAX_YAW);
+
+  float setpoint_roll   =0;
+  float setpoint_pitch  =0;
+  float setpoint_yaw    =0;
+
+  float pid_roll_output  =0;
+  float pid_pitch_output =0;
+  float pid_yaw_output   =0;
+
+  float rate_roll, rate_pitch, rate_yaw;
+  float thrust_radio=1000;
+
   while (1)
   {
-
-	setpoint_roll=0.0f;
     /* USER CODE END WHILE */
     /* USER CODE BEGIN 3 */
 	loop_timer = HAL_GetTick();
 	Read_DMP();
+	// get angle rates degrees / seconds
+	rate_roll  = (((float)gyro[0]) - gx_offset) / LSB_Sensitivity;
+	rate_pitch = (((float)gyro[1]) - gy_offset) / LSB_Sensitivity;
+	rate_yaw   = (((float)gyro[2]) - gz_offset) / LSB_Sensitivity;
 
-	gx = (((float)gyro[0]) - offset_gx) / LSB_Sensitivity;
-	gy = (((float)gyro[1]) - offset_gy) / LSB_Sensitivity;
-	gz = (((float)gyro[2]) - offset_gz) / LSB_Sensitivity;
+	pid_roll_output  = updatePID(&pid_roll, setpoint_roll, roll, rate_roll);
+	pid_pitch_output = updatePID(&pid_pitch, setpoint_pitch, pitch, rate_pitch);
+	pid_yaw_output   = updatePID(&pid_yaw, setpoint_yaw, roll, rate_yaw);
+	/* set PWM Duty cycle */
+	htim3.Instance->CCR1 = (uint32_t)CLIP(thrust_radio + pid_yaw_output, 1200, 2000);	/* Channel 1 motor CW    */
+	htim3.Instance->CCR2 = (uint32_t)CLIP(thrust_radio - pid_yaw_output, 1200, 2000);	/* Channel 2 motor CCW   */
+	htim3.Instance->CCR3 = (uint32_t)CLIP(1500.0  + pid_roll_output, 500, 2000);	  	/* Channel 3 serve roll  */
+	htim3.Instance->CCR4 = (uint32_t)CLIP(1500.0  + pid_pitch_output,500, 2000);    	/* Channel 4 serve pitch */
 
-	gx_angle += gx*SAMPLE_TIME_S;
-	gy_angle += gy*SAMPLE_TIME_S;
-	gz_angle += gz*SAMPLE_TIME_S;
-
-	PIDController_Update(&pid_roll, setpoint_roll, roll);
-	PIDController_Update(&pid_roll_rate, pid_roll.out, gx);
 	//integrate the pitch, roll, yaw angle every 5 milliseconds.
-	while (HAL_GetTick() - loop_timer < 5 );
+	while (HAL_GetTick() - loop_timer < sec2milliseconds(SAMPLE_TIME_S));
   }
   /* USER CODE END 3 */
 }
@@ -214,7 +251,12 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+  RCC_OscInitStruct.PLL.PLLM = 8;
+  RCC_OscInitStruct.PLL.PLLN = 84;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
+  RCC_OscInitStruct.PLL.PLLQ = 4;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -224,12 +266,12 @@ void SystemClock_Config(void)
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
   {
     Error_Handler();
   }
@@ -266,6 +308,78 @@ static void MX_I2C1_Init(void)
   /* USER CODE BEGIN I2C1_Init 2 */
 
   /* USER CODE END I2C1_Init 2 */
+
+}
+
+/**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 83;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 3999 ;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 500;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.Pulse = 0;
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+  HAL_TIM_MspPostInit(&htim3);
 
 }
 

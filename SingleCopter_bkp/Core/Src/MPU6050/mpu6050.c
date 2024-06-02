@@ -3,7 +3,6 @@
 #include "MPU6050/I2C.h"
 #include "MPU6050/mpu6050.h"
 #include "string.h" //for reset buffer
-#include <stdlib.h>
 
 #define PRINT_ACCEL     (0x01)
 #define PRINT_GYRO      (0x02)
@@ -17,18 +16,9 @@
 #define FLASH_MEM_START ((void*)0x1800)
 #define q30  1073741824.0f
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
-
-#define deg2rad(degrees) degrees * M_PI / 180.0
-#define rad2deg(radians) radians * 180.0 / M_PI
-
 short gyro[3], accel[3], sensors;
-float phi, theta, psi;
 float pitch, roll, yaw;
 float q0 = 1.0f, q1 = 0.0f, q2 = 0.0f, q3 = 0.0f;
-float dcm[3][3];
 static signed char gyro_orientation[9] = { -1, 0, 0, 0, -1, 0, 0, 0, 1 };
 
 static unsigned short inv_row_2_scale(const signed char *row) {
@@ -306,70 +296,19 @@ void Read_DMP(void) {
     q2 = quat[2] / q30;   // y
     q3 = quat[3] / q30;   // z
 
-    // Formulas from: https://www.sedris.org/wg8home/Documents/WG80485.pdf, page 39
-    phi   = atan2f(q0 * q1 +  q2 * q3, 0.5 - (q1 * q1 + q2 * q2) );
-    theta = asinf(2  * (q0 * q2 - q3 * q1 )); // TODO
-    psi   = atan2f(q0 * q3 + q1* q2, 0.5 - 1 * (q2 * q2 + q3 * q3)   );
-
-    // angle in degrees:
-    roll  = rad2deg(phi);
-    pitch = rad2deg(theta);
-    yaw   = rad2deg(psi);
-
+    // Formulas from: https://www.sedris.org/wg8home/Documents/WG80485.pdf
+    // page 39
+    roll  = atan2f(q0 * q1 +  q2 * q3, 0.5 - (q1 * q1 + q2 * q2) ) * 57.3;
+    pitch = asinf(2  * (q0 * q2 - q3 * q1 )) * 57.3; // TODO
+    yaw   = atan2f(q0 * q3 + q1* q2, 0.5 - 1 * (q2 * q2 + q3 * q3)   ) * 57.3;
   }
 
 }
-
 /**************************************************************************
- Function: Wait to active the DMP mode and set up.
- Entry parameters: none
- Return value: none
- **************************************************************************/
-void Calubration_DMP(void)
-{
-  float avg_gyro_x, avg_gyro_y, avg_gyro_z;
-
-  do
-  {
-	  avg_gyro_x=avg_gyro_y=avg_gyro_z=0;
-	  for (uint32_t i =0; i<100 ;i++)
-	  {
-		  Read_DMP();
-		  avg_gyro_x += abs((float)gyro[0]);
-		  avg_gyro_y += abs((float)gyro[1]);
-		  avg_gyro_z += abs((float)gyro[2]);
-	  }
-	  avg_gyro_x/=100;
-	  avg_gyro_y/=100;
-	  avg_gyro_z/=100;
-
-  } while(avg_gyro_x>5 || avg_gyro_y>5 || avg_gyro_z>5);
-}
-
-
-void DMP_get_gyro_offsets(float* gx_offset, float* gy_offset, float* gz_offset)
-{
-	  *gx_offset = 0.0;
-	  *gy_offset = 0.0;
-	  *gz_offset = 0.0;
-	  for(uint32_t i=0 ; i<100; i++)
-	  {
-		  Read_DMP();
-		  *gx_offset = *gx_offset + (float)gyro[0];
-		  *gy_offset = *gy_offset + (float)gyro[1];
-		  *gz_offset = *gz_offset + (float)gyro[2];
-	  }
-
-	  *gx_offset=*gx_offset/100;
-	  *gy_offset=*gy_offset/100;
-	  *gz_offset=*gz_offset/100;
-}
-
-
-/**************************************************************************
- Function: Read MPU6050 built-in temperature sensor data
- Entry parameters: none
- Return value: Celsius temperature
+ 函数功能：读取MPU6050内置温度传感器数据
+ 入口参数：无
+ 返回  值：摄氏温度
+ 作    者：平衡小车之家
  **************************************************************************/
 int Read_Temperature(void) {
   float Temp;
@@ -382,10 +321,4 @@ int Read_Temperature(void) {
   Temp = (36.53 + Temp / 340) * 10;
   return (int) Temp;
 }
-
-
-
-
-
-
 //------------------End of File----------------------------
