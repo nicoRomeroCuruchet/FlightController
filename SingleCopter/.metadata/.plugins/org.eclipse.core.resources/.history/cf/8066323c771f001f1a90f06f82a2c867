@@ -1,0 +1,48 @@
+#include "PID/PID.h"
+
+
+// Initialize the PID controller
+void initializePID(PIDController *pid, float Kp, float Ki, float Kd, float T) {
+
+    pid->Kp = Kp;
+    pid->Ki = Ki;
+    pid->Kd = Kd;
+    pid->T = T;
+    pid->prev_error = 0.0f;
+    pid->integral   = 0.0f;
+    pid->derivative = 0.0f;
+
+    pid->min_integral_limit = -400.0;
+    pid->max_integral_limit = 400.0;
+
+    pid->min_output_limit = 1000.0;
+    pid->max_output_limit = 2000.0;
+
+}
+
+// Update the PID controller
+float updatePID(PIDController *pid,
+		        float setpoint,
+				float measurement,
+				float measurement_dot) {
+
+	float error = setpoint - measurement;
+    // Proportional term
+    float P = pid->Kp * error;
+    // Integral term
+    pid->integral += (pid->T / 2) * (error + pid->prev_error);
+    float I = pid->Ki * pid->integral;
+    // constrain integral
+    I = CLIP(I, pid->min_integral_limit, pid->max_integral_limit);
+    // Derivative term
+    float D = 2 * pid->Kd * (error - pid->prev_error) / pid->T - pid->derivative;
+    pid->derivative = D;
+    // Compute the control output
+    float output = P + I + D;
+    // constrain output
+    output = CLIP(output, pid->min_output_limit, pid->max_output_limit);
+    // Save the current error for the next iteration
+    pid->prev_error = error;
+
+    return output;
+}
