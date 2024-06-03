@@ -1,4 +1,0 @@
-../Core/Src/MPU6050/I2C.c:5:19:i2c_write	1
-../Core/Src/MPU6050/I2C.c:11:19:i2c_read	1
-../Core/Src/MPU6050/I2C.c:18:19:IICwriteBit	2
-../Core/Src/MPU6050/I2C.c:27:19:IICwriteBits	2
