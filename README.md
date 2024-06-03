@@ -8,10 +8,11 @@ Vague ideas about a flight controller.
 - File -> Import -> General -> Existing Projects into Workspace.
 - In **Select root directory** browse to SingleCopter folder and click **Finish**.
         
-The code compiles without errors (checkout log.txt), activates the DMP mode of the MPU6050, it returns the quaternion and from this I estimate the values ​​for ROLL, PITCH and YAW.
-For calculations use:
-
 The code is in:
-        
+
         .c: SingleCopter/Core/Src
         .h: SingleCopter/Core/Inc
+
+## Set up TIMER 3 for PWM to control de motors and servos:
+
+$$PWMFreq = \frac{Timer Clock}{(Prescaler+1)×(Counter Period+1)}$$
