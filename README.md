@@ -16,3 +16,8 @@ The code is in:
 ## Set up TIMER 3 for PWM to control de motors and servos:
 
 $$PWMFreq = \frac{Timer Clock}{(Prescaler+1)×(Counter Period+1)}$$
+
+- PWMFreq        = 250 Hz
+- TimerClock     = 84 MHz
+- Prescaler      = 83
+- Counter Period = 3999
