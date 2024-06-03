@@ -4,9 +4,9 @@ Vague ideas about a flight controller.
 ## Set up
         git clone https://github.com/nicoRomeroCuruchet/FlightController.git
 
-- Open **STM32CubeIDE** and browse to the folder **FlightController**.
-- File -> Import -> General -> Existing Projects into Workspace.
-- In **Select root directory** browse to SingleCopter folder and click **Finish**.
+- Open **STM32CubeIDE**, browse to the folder **FlightController** and click **Launch**.
+- File -> Import -> General -> **Existing Projects into Workspace**.
+- In **Select root directory** browse to **SingleCopter** folder and click **Finish**.
         
 The code is in:
 
