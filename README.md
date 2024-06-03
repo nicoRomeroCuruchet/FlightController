@@ -13,7 +13,7 @@ The code is in:
         .c: SingleCopter/Core/Src
         .h: SingleCopter/Core/Inc
 
-## Set up TIMER 3 for PWM to control de motors and servos:
+## TIMER 3 for PWM to control de motors and servos:
 
 $$PWMFreq = \frac{Timer Clock}{(Prescaler+1)×(Counter Period+1)}$$
 
