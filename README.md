@@ -8,7 +8,7 @@ Vague ideas about a flight controller.
 - File -> Import -> General -> **Existing Projects into Workspace**.
 - In **Select root directory** browse to **SingleCopter** folder and click **Finish**.
         
-The code is in:
+For the details in the code check:
 
         .c: SingleCopter/Core/Src
         .h: SingleCopter/Core/Inc
