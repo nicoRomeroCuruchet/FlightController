@@ -31,21 +31,22 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define LSB_Sensitivity 16.4
-
+#define LSB_Sensitivity 16.4	// Gyro degrees conversions
+#define ALPHA 0.3  				// Gyro low pass filter
+#define SAMPLE_TIME_S 0.005f 	// 200 Hz
 /* Controller parameters */
 /***********************************************************/
 /************************** Roll **************************/
 /***********************************************************/
-#define kp_roll  30.0f
-#define ki_roll  0.0f
+#define kp_roll  1.8f
+#define ki_roll  0.04f
 #define kd_roll  0.0f
 
 #define PID_LIM_MIN_INT_ROLL -50.0f
 #define PID_LIM_MAX_INT_ROLL +50.0f
 
-#define PID_LIM_MIN_ROLL -200.0f
-#define PID_LIM_MAX_ROLL +200.0f
+#define PID_LIM_MIN_ROLL -400.0f
+#define PID_LIM_MAX_ROLL +400.0f
 /***********************************************************/
 /************************** Pitch **************************/
 /***********************************************************/
@@ -61,9 +62,9 @@
 /***********************************************************/
 /************************** Yaw ****************************/
 /***********************************************************/
-#define kp_yaw  1.0f
+#define kp_yaw  1.8f
 #define ki_yaw  0.0f
-#define kd_yaw  0.0f
+#define kd_yaw  18.0f * SAMPLE_TIME_S
 
 #define PID_LIM_MIN_INT_YAW -100.0f
 #define PID_LIM_MAX_INT_YAW +100.0f
@@ -72,19 +73,38 @@
 #define PID_LIM_MAX_YAW +400.0f
 /**********************************************************/
 /**********************************************************/
-#define SAMPLE_TIME_S 0.005f // 200 Hz
+#define SERVO_PITCH_CENTER 1550
+#define SERVO_PITCH_MAX 1800
+#define SERVO_PITCH_MIN 1100
+
+#define SERVO_ROLL_CENTER 1530
+#define SERVO_ROLL_MAX SERVO_PITCH_MAX
+#define SERVO_ROLL_MIN SERVO_PITCH_MIN
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define DUTY_CYCLE_MOTOR_MIN 1000
+#define DUTY_CYCLE_TURNOFF 1000
+#define DUTY_CYCLE_MOTOR_MIN 1200
 #define DUTY_CYCLE_MOTOR_MAX 2000
-#define DUTY_CYCLE_SERVO_CENTER 1500
+
+#define TIMCLOCK   84000000
+#define PRESCALAR  83
+#define AUTORELOAD 20000
+
+#define RADIO_MIDDLE_FREQ 1500.0f
+#define RADIO_DEAD_BAND 5.0f
+
+#define MAP(input, in_min, in_max, out_min, out_max) \
+    (((input) - (in_min)) * ((out_max) - (out_min)) / ((in_max) - (in_min)) + (out_min))
+
+
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
 
+TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim3;
 
 /* USER CODE BEGIN PV */
@@ -94,6 +114,51 @@ extern short gyro[3];
 float gx, gy, gz;
 float gx_angle, gy_angle, gz_angle;
 uint32_t loop_timer;
+/* Measure Width */
+
+//CH1
+volatile uint32_t usWidth_ch1      = 0;
+volatile uint32_t IC_Val1_ch1      = 0;
+volatile uint32_t IC_Val2_ch1      = 0;
+volatile uint32_t difference_ch1   = 0;
+volatile int is_first_captured_ch1 = 0;
+//CH2
+volatile uint32_t usWidth_ch2      = 0;
+volatile uint32_t IC_Val1_ch2      = 0;
+volatile uint32_t IC_Val2_ch2      = 0;
+volatile uint32_t difference_ch2   = 0;
+volatile int is_first_captured_ch2 = 0;
+//CH3
+volatile uint32_t usWidth_ch3      = 0;
+volatile uint32_t IC_Val1_ch3      = 0;
+volatile uint32_t IC_Val2_ch3      = 0;
+volatile uint32_t difference_ch3   = 0;
+volatile int is_first_captured_ch3 = 0;
+//CH4
+volatile uint32_t usWidth_ch4      = 0;
+volatile uint32_t IC_Val1_ch4      = 0;
+volatile uint32_t IC_Val2_ch4      = 0;
+volatile uint32_t difference_ch4   = 0;
+volatile int is_first_captured_ch4 = 0;
+
+float setpoint_roll   =0;
+float setpoint_pitch  =0;
+float setpoint_yaw    =0;
+uint32_t measure_time =0;
+
+float pid_roll_output  =0;
+float pid_pitch_output =0;
+float pid_yaw_output   =0;
+
+float rate_roll=0;
+float rate_pitch=0;
+float rate_yaw=0;
+
+float throttle_radio=0;
+
+/* Measure Frequency */
+volatile float frequency = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -101,6 +166,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_TIM3_Init(void);
+static void MX_TIM1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -141,18 +207,34 @@ int main(void)
   MX_GPIO_Init();
   MX_I2C1_Init();
   MX_TIM3_Init();
+  MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
-
+  if (HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_1) != HAL_OK) // Throttle
+  {
+	 Error_Handler();
+  }
+  if (HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_2) != HAL_OK) // Pitch
+  {
+     Error_Handler();
+  }
+  if (HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_3) != HAL_OK) // Roll
+  {
+  	 Error_Handler();
+  }
+  if (HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_4) != HAL_OK) // Yaw
+  {
+  	 Error_Handler();
+  }
   /*Initialize PWM motors and servos */
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);  /* Motor CW    */
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);  /* Motor CCW   */
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);  /* Servo Roll  */
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);  /* Servo Pitch */
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);  			/* Servo Roll  */
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);  			/* Servo Pitch */
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3); 		 	/* Motor CW    */
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);  			/* Motor CCW   */
  /*turn off motors and center servos */
-  htim3.Instance->CCR1 = (uint32_t)DUTY_CYCLE_MOTOR_MIN; 	 /*  Channel 1 motor CW    */
-  htim3.Instance->CCR2 = (uint32_t)DUTY_CYCLE_MOTOR_MIN;	 /*  Channel 2 motor CCW   */
-  htim3.Instance->CCR3 = (uint32_t)DUTY_CYCLE_SERVO_CENTER;	 /*  Channel 1 motor CW    */
-  htim3.Instance->CCR4 = (uint32_t)DUTY_CYCLE_SERVO_CENTER;	 /*  Channel 2 motor CCW   */
+  htim3.Instance->CCR1 = (uint32_t)SERVO_PITCH_CENTER; 	 	 /*  Channel 1 servo Pitch         */
+  htim3.Instance->CCR2 = (uint32_t)SERVO_ROLL_CENTER;	     /*  Channel 2 servo Roll          */
+  htim3.Instance->CCR3 = (uint32_t)DUTY_CYCLE_TURNOFF;	     /*  Channel 3 motor CW    */
+  htim3.Instance->CCR4 = (uint32_t)DUTY_CYCLE_TURNOFF;	     /*  Channel 4 motor CCW   */
   /* DMP MPU initialize */
   DMP_Init();
   // Wait 10s for calibration, don't move the IMU!
@@ -195,38 +277,50 @@ int main(void)
 				  PID_LIM_MIN_YAW,
 				  PID_LIM_MAX_YAW);
 
-  float setpoint_roll   =0;
-  float setpoint_pitch  =0;
-  float setpoint_yaw    =0;
-
-  float pid_roll_output  =0;
-  float pid_pitch_output =0;
-  float pid_yaw_output   =0;
-
-  float rate_roll, rate_pitch, rate_yaw;
-  float thrust_radio=1000;
 
   while (1)
   {
     /* USER CODE END WHILE */
-
     /* USER CODE BEGIN 3 */
 	loop_timer = HAL_GetTick();
 	Read_DMP();
-	// get angle rates degrees / seconds
-	rate_roll  = (((float)gyro[0]) - gx_offset) / LSB_Sensitivity;
-	rate_pitch = (((float)gyro[1]) - gy_offset) / LSB_Sensitivity;
-	rate_yaw   = (((float)gyro[2]) - gz_offset) / LSB_Sensitivity;
+	// get angle rates degrees / seconds with an exponential filter
+	rate_roll  = (1-ALPHA)*rate_roll  + ALPHA*((((float)gyro[0]) - gx_offset) / LSB_Sensitivity);
+	rate_pitch = (1-ALPHA)*rate_pitch + ALPHA*((((float)gyro[1]) - gy_offset) / LSB_Sensitivity);
+	rate_yaw   = (1-ALPHA)*rate_yaw   + ALPHA*((((float)gyro[2]) - gz_offset) / LSB_Sensitivity);
 
-	pid_roll_output  = updatePID(&pid_roll, setpoint_roll, roll, rate_roll);
+	throttle_radio = usWidth_ch1;
+	//setpoints
+	setpoint_yaw   = RADIO_MIDDLE_FREQ - (float)usWidth_ch2;
+	if (abs(setpoint_yaw)< RADIO_DEAD_BAND){
+		setpoint_yaw=0.0;
+	}else{
+		setpoint_yaw = MAP(setpoint_yaw, -500.0, +500.0,-20.0,20.0);
+	}
+
+	setpoint_pitch = RADIO_MIDDLE_FREQ - (float)usWidth_ch3;
+	if (abs(setpoint_pitch)< RADIO_DEAD_BAND){
+		setpoint_pitch=0.0;
+	} else{
+		setpoint_pitch = MAP(setpoint_pitch, -500.0, +500.0,-20.0,20.0);
+	}
+
+	setpoint_roll  = RADIO_MIDDLE_FREQ - (float)usWidth_ch4;
+	if (abs(setpoint_roll)< RADIO_DEAD_BAND){
+		setpoint_roll=0.0;
+	} else{
+		setpoint_roll = MAP(setpoint_roll, -500.0, +500.0,-20.0,20.0);
+	}
+	// Feedback loop control
+	pid_yaw_output   = updatePID(&pid_yaw, setpoint_yaw, yaw, rate_yaw);
 	pid_pitch_output = updatePID(&pid_pitch, setpoint_pitch, pitch, rate_pitch);
-	pid_yaw_output   = updatePID(&pid_yaw, setpoint_yaw, roll, rate_yaw);
+	pid_roll_output  = updatePID(&pid_roll, setpoint_roll, roll, rate_roll);
 	/* set PWM Duty cycle */
-	htim3.Instance->CCR1 = (uint32_t)CLIP(thrust_radio + pid_yaw_output, 1200, 2000);	/* Channel 1 motor CW    */
-	htim3.Instance->CCR2 = (uint32_t)CLIP(thrust_radio - pid_yaw_output, 1200, 2000);	/* Channel 2 motor CCW   */
-	htim3.Instance->CCR3 = (uint32_t)CLIP(1500.0  + pid_roll_output, 500, 2000);	  	/* Channel 3 serve roll  */
-	htim3.Instance->CCR4 = (uint32_t)CLIP(1500.0  + pid_pitch_output,500, 2000);    	/* Channel 4 serve pitch */
-
+	htim3.Instance->CCR1 = (uint32_t)CLIP(SERVO_ROLL_CENTER + pid_roll_output,   SERVO_ROLL_MIN,  SERVO_ROLL_MAX);       /* Channel 1 serve roll  */
+	htim3.Instance->CCR2 = (uint32_t)CLIP(SERVO_PITCH_CENTER + pid_pitch_output, SERVO_PITCH_MIN, SERVO_PITCH_MAX);      /* Channel 2 serve pitch */
+	htim3.Instance->CCR3 = (uint32_t)CLIP(throttle_radio + pid_yaw_output, DUTY_CYCLE_MOTOR_MIN, DUTY_CYCLE_MOTOR_MAX);  /* Channel 3 motor CW    */
+	htim3.Instance->CCR4 = (uint32_t)CLIP(throttle_radio - pid_yaw_output, DUTY_CYCLE_MOTOR_MIN, DUTY_CYCLE_MOTOR_MAX);  /* Channel 4 motor CCW   */
+	measure_time = HAL_GetTick() - loop_timer;
 	//integrate the pitch, roll, yaw angle every 5 milliseconds.
 	while (HAL_GetTick() - loop_timer < sec2milliseconds(SAMPLE_TIME_S));
   }
@@ -310,6 +404,78 @@ static void MX_I2C1_Init(void)
   /* USER CODE BEGIN I2C1_Init 2 */
 
   /* USER CODE END I2C1_Init 2 */
+
+}
+
+/**
+  * @brief TIM1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM1_Init(void)
+{
+
+  /* USER CODE BEGIN TIM1_Init 0 */
+
+  /* USER CODE END TIM1_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_IC_InitTypeDef sConfigIC = {0};
+
+  /* USER CODE BEGIN TIM1_Init 1 */
+
+  /* USER CODE END TIM1_Init 1 */
+  htim1.Instance = TIM1;
+  htim1.Init.Prescaler = 83;
+  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim1.Init.Period = 19999;
+  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim1.Init.RepetitionCounter = 0;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_IC_Init(&htim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_BOTHEDGE;
+  sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
+  sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
+  sConfigIC.ICFilter = 0;
+  if (HAL_TIM_IC_ConfigChannel(&htim1, &sConfigIC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_IC_ConfigChannel(&htim1, &sConfigIC, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigIC.ICFilter = 1;
+  if (HAL_TIM_IC_ConfigChannel(&htim1, &sConfigIC, TIM_CHANNEL_3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_IC_ConfigChannel(&htim1, &sConfigIC, TIM_CHANNEL_4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM1_Init 2 */
+
+  /* USER CODE END TIM1_Init 2 */
 
 }
 
@@ -404,6 +570,129 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+{
+
+	if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1)  // if the interrupt source is channel1
+	{
+		if (is_first_captured_ch1==0) // if the first value is not captured
+		{
+			IC_Val1_ch1 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1); // read the first value
+			is_first_captured_ch1 = 1;  // set the first captured as true
+		}
+
+		else   // if the first is already captured
+		{
+			IC_Val2_ch1 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);  // read second value
+
+			if (IC_Val2_ch1 > IC_Val1_ch1)
+			{
+				difference_ch1 = IC_Val2_ch1-IC_Val1_ch1;
+			}
+
+			else if (IC_Val1_ch1 > IC_Val2_ch1)
+			{
+				difference_ch1 = IC_Val2_ch1 - (IC_Val1_ch1 - AUTORELOAD);
+			}
+
+			float refClock = TIMCLOCK/(PRESCALAR);
+			float mFactor = 1000000/refClock;
+
+			usWidth_ch1 = difference_ch1*mFactor;
+			is_first_captured_ch1 = 0; // set it back to false
+		}
+	}
+
+	if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2)  // if the interrupt source is channel1
+		{
+			if (is_first_captured_ch2==0) // if the first value is not captured
+			{
+				IC_Val1_ch2 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2); // read the first value
+				is_first_captured_ch2 = 1;  // set the first captured as true
+			}
+
+			else   // if the first is already captured
+			{
+				IC_Val2_ch2 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);  // read second value
+
+				if (IC_Val2_ch2 > IC_Val1_ch2)
+				{
+					difference_ch2 = IC_Val2_ch2-IC_Val1_ch2;
+				}
+
+				else if (IC_Val1_ch2 > IC_Val2_ch2)
+				{
+					difference_ch2 =  IC_Val2_ch2  - (IC_Val1_ch2 - AUTORELOAD);
+				}
+
+				float refClock = TIMCLOCK/(PRESCALAR);
+				float mFactor = 1000000/refClock;
+
+				usWidth_ch2 = difference_ch2*mFactor;
+				is_first_captured_ch2 = 0; // set it back to false
+			}
+		}
+
+	if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_3)  // if the interrupt source is channel1
+		{
+			if (is_first_captured_ch3 ==0) // if the first value is not captured
+			{
+				IC_Val1_ch3 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_3); // read the first value
+				is_first_captured_ch3 = 1;  // set the first captured as true
+			}
+
+			else   // if the first is already captured
+			{
+				IC_Val2_ch3 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_3);  // read second value
+
+				if (IC_Val2_ch3 > IC_Val1_ch3)
+				{
+					difference_ch3 = IC_Val2_ch3-IC_Val1_ch3;
+				}
+
+				else if (IC_Val1_ch3 > IC_Val2_ch3)
+				{
+					difference_ch3 =  IC_Val2_ch3  - (IC_Val1_ch3 - AUTORELOAD);
+				}
+
+				float refClock = TIMCLOCK/(PRESCALAR);
+				float mFactor = 1000000/refClock;
+
+				usWidth_ch3 = difference_ch3*mFactor;
+				is_first_captured_ch3 = 0; // set it back to false
+			}
+		}
+
+	if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_4)  // if the interrupt source is channel1
+	{
+		if (is_first_captured_ch4 ==0) // if the first value is not captured
+		{
+			IC_Val1_ch4 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_4); // read the first value
+			is_first_captured_ch4 = 1;  // set the first captured as true
+		}
+
+		else   // if the first is already captured
+		{
+			IC_Val2_ch4 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_4);  // read second value
+
+			if (IC_Val2_ch4 > IC_Val1_ch4)
+			{
+				difference_ch4 = IC_Val2_ch4-IC_Val1_ch4;
+			}
+
+			else if (IC_Val1_ch4 > IC_Val2_ch4)
+			{
+				difference_ch4 =  IC_Val2_ch4  - (IC_Val1_ch4 - AUTORELOAD);
+			}
+
+			float refClock = TIMCLOCK/(PRESCALAR);
+			float mFactor = 1000000/refClock;
+
+			usWidth_ch4 = difference_ch4*mFactor;
+			is_first_captured_ch4 = 0; // set it back to false
+		}
+	}
+}
 
 /* USER CODE END 4 */
 
