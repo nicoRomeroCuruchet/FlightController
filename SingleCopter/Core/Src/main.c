@@ -93,7 +93,7 @@
 #define AUTORELOAD 20000
 
 #define RADIO_MIDDLE_FREQ 1500.0f
-#define RADIO_DEAD_BAND 5.0f
+#define RADIO_DEAD_BAND 8.0f
 
 #define MAP(input, in_min, in_max, out_min, out_max) \
     (((input) - (in_min)) * ((out_max) - (out_min)) / ((in_max) - (in_min)) + (out_min))
@@ -209,6 +209,8 @@ int main(void)
   MX_TIM3_Init();
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
+
   if (HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_1) != HAL_OK) // Throttle
   {
 	 Error_Handler();
@@ -236,6 +238,15 @@ int main(void)
   htim3.Instance->CCR3 = (uint32_t)DUTY_CYCLE_TURNOFF;	     /*  Channel 3 motor CW    */
   htim3.Instance->CCR4 = (uint32_t)DUTY_CYCLE_TURNOFF;	     /*  Channel 4 motor CCW   */
   /* DMP MPU initialize */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
+  HAL_Delay(150);
+  do{
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
+	  HAL_Delay(150);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
+	  HAL_Delay(150);
+
+  } while(MPU6050_getDeviceID() != 0x68);
   DMP_Init();
   // Wait 10s for calibration, don't move the IMU!
   Calubration_DMP();
@@ -277,10 +288,11 @@ int main(void)
 				  PID_LIM_MIN_YAW,
 				  PID_LIM_MAX_YAW);
 
-
+  float yaw_offset = yaw;
   while (1)
   {
     /* USER CODE END WHILE */
+
     /* USER CODE BEGIN 3 */
 	loop_timer = HAL_GetTick();
 	Read_DMP();
@@ -288,6 +300,7 @@ int main(void)
 	rate_roll  = (1-ALPHA)*rate_roll  + ALPHA*((((float)gyro[0]) - gx_offset) / LSB_Sensitivity);
 	rate_pitch = (1-ALPHA)*rate_pitch + ALPHA*((((float)gyro[1]) - gy_offset) / LSB_Sensitivity);
 	rate_yaw   = (1-ALPHA)*rate_yaw   + ALPHA*((((float)gyro[2]) - gz_offset) / LSB_Sensitivity);
+	yaw -= yaw_offset;
 
 	throttle_radio = usWidth_ch1;
 	//setpoints
@@ -558,12 +571,23 @@ static void MX_TIM3_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
 /* USER CODE BEGIN MX_GPIO_Init_1 */
 /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : PB14 */
+  GPIO_InitStruct.Pin = GPIO_PIN_14;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
