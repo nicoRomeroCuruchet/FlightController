@@ -10,13 +10,14 @@ void initializePID(PIDController *pid,
 				   float min_integral_limit,
 				   float max_integral_limit,
 				   float min_output_limit,
-				   float max_output_limit) {
-
+				   float max_output_limit)
+{
     pid->Kp = Kp;
     pid->Ki = Ki;
     pid->Kd = Kd;
     pid->T = T;
 
+    pid->tau = 1e-8f;
     pid->prev_setpoint = 0.0f;
 
     pid->prev_error      = 0.0f;
@@ -40,11 +41,12 @@ float updatePID(PIDController *pid,
     // Proportional term
     float P = pid->Kp * error;
     // Integral term
-    pid->integral += (pid->T / 2) * (error + pid->prev_error);
+    pid->integral = pid->integral + 0.5 * pid->T  * (error + pid->prev_error);
     // constrain integral output
     float I = CLIP(pid->Ki * pid->integral, pid->min_integral_limit, pid->max_integral_limit);
     // Derivative term
-    float D = 2 * pid->Kd * (((setpoint - pid->prev_setpoint) / pid->T) - measurement_dot) - pid->prev_derivative;
+    float filter = 2*(pid->tau - pid->T) / 2*(pid->tau + pid->T);
+    float D = 2 * pid->Kd * (((setpoint - pid->prev_setpoint) / pid->T) - measurement_dot) + filter*pid->prev_derivative;
     // Compute the control output, constrain output
     float output = CLIP(P + I + D, pid->min_output_limit, pid->max_output_limit);
     // Save the current error for the next iteration, e[k-1]

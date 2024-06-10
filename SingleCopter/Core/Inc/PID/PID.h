@@ -19,6 +19,7 @@ typedef struct {
     float max_integral_limit;  // integral limits
     float min_output_limit;	   // min PID limit
     float max_output_limit;	   // max PID limit
+    float tau; 				   // Derivate filte
 
 } PIDController;
 

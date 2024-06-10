@@ -154,6 +154,8 @@ float rate_roll=0;
 float rate_pitch=0;
 float rate_yaw=0;
 
+float yaw_offset;
+
 float throttle_radio=0;
 
 /* Measure Frequency */
@@ -228,9 +230,11 @@ int main(void)
   	 Error_Handler();
   }
 
+  while(usWidth_ch1 < 950 || usWidth_ch2 < 950 || usWidth_ch3 < 950 || usWidth_ch4 < 950)
+	  __HAL_TIM_SET_COUNTER(&htim1, 0);  // reset the counter
+
   while(usWidth_ch1>2000 || usWidth_ch2>2000 || usWidth_ch3>2000 || usWidth_ch4>2000)
 	__HAL_TIM_SET_COUNTER(&htim1, 0);  // reset the counter
-
 
   /*Initialize PWM motors and servos */
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);  			/* Servo Roll  */
@@ -293,13 +297,11 @@ int main(void)
 				  PID_LIM_MIN_YAW,
 				  PID_LIM_MAX_YAW);
 
-  float yaw_offset = yaw;
-
-  while (usWidth_ch1> 1100)
-  {
+  do{
 	  Read_DMP();
 	  yaw_offset = yaw;
   }
+  while (usWidth_ch1> 1100);
 
   while (1)
   {
