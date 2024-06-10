@@ -40,7 +40,7 @@
 /***********************************************************/
 #define kp_roll  1.8f
 #define ki_roll  0.04f
-#define kd_roll  0.0f
+#define kd_roll  18.0f * SAMPLE_TIME_S
 
 #define PID_LIM_MIN_INT_ROLL -50.0f
 #define PID_LIM_MAX_INT_ROLL +50.0f
@@ -62,9 +62,9 @@
 /***********************************************************/
 /************************** Yaw ****************************/
 /***********************************************************/
-#define kp_yaw  1.8f
+#define kp_yaw  1.0f
 #define ki_yaw  0.0f
-#define kd_yaw  18.0f * SAMPLE_TIME_S
+#define kd_yaw  0.0f
 
 #define PID_LIM_MIN_INT_YAW -100.0f
 #define PID_LIM_MAX_INT_YAW +100.0f
@@ -227,6 +227,11 @@ int main(void)
   {
   	 Error_Handler();
   }
+
+  while(usWidth_ch1>2000 || usWidth_ch2>2000 || usWidth_ch3>2000 || usWidth_ch4>2000)
+	__HAL_TIM_SET_COUNTER(&htim1, 0);  // reset the counter
+
+
   /*Initialize PWM motors and servos */
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);  			/* Servo Roll  */
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);  			/* Servo Pitch */
@@ -289,6 +294,13 @@ int main(void)
 				  PID_LIM_MAX_YAW);
 
   float yaw_offset = yaw;
+
+  while (usWidth_ch1> 1100)
+  {
+	  Read_DMP();
+	  yaw_offset = yaw;
+  }
+
   while (1)
   {
     /* USER CODE END WHILE */
