@@ -71,8 +71,10 @@ void get_rotation_from_euler_angles(float angles[3], float R[3][3])
 	R[2][2] = cos_phi * cos_theta;
 }
 
-void get_rotation_error(float R_d[3][3],  float R[3][3], float result[3][3])
+// e_r
+void get_rotation_error(float R_d[3][3],  float R[3][3], float result[3])
 {
+	float tmp_res[3][3];
 	for(int i=0; i<3;i++)
 	{
 		for(int j=0; j<3;j++)
@@ -82,11 +84,15 @@ void get_rotation_error(float R_d[3][3],  float R[3][3], float result[3][3])
 			// R.T * R_d:
 			float r2 = R[0][i]*R_d[0][j] + R[1][i]*R_d[1][j] + R[2][i]*R_d[2][j];
 			// R_d.T * R - R.T * R_d:
-			result[i][j] = r1-r2;
+			tmp_res[i][j] = 0.5*(r1-r2);
 		}
 	}
+	result[0] =  tmp_res[2][1];
+	result[1] =  tmp_res[0][2];
+	result[2] =  tmp_res[0][1];
 }
 
+// e_w
 void get_omega_error(float W[3], float W_d[3], float R_d[3][3], float R[3][3], float result[3])
 {
 	float RTRd [3][3];
