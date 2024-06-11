@@ -2,32 +2,8 @@
 #include "Quaternion/quaternion_utils.h"
 
 
-void  get_omega_body_frame(float angles_rates[3], float angles[3], float W[3])
-{
-
-	float phi = angles[0];
-	float theta = angles [1];
-
-	float sin_phi = sinf(phi);
-	float cos_phi = cosf(phi);
-
-	float cos_theta = cosf(theta);
-	float sin_theta = sinf(theta);
-
-	float phi_dot   = angles_rates[0];
-	float theta_dot = angles_rates[1];
-	float psi_dot   = angles_rates[2];
-
-	W[0] = phi_dot - psi_dot*sin_theta;
-	W[1] = psi_dot*sin_theta*cos_theta + theta_dot*cos_theta;
-	W[2] = psi_dot*cos_phi*cos_theta - theta_dot*sin_phi;
-
-}
-
-
 void get_rotation_from_quaternion(Quaternion* q, float R[3][3])
 {
-
 	R[0][0] = 1 - 2*(q->y)*(q->y) - 2*(q->z)*(q->z);
 	R[0][1] = 2*(q->x)*(q->y) - 2*(q->w)*(q->z);
 	R[0][2] = 2*(q->x)*(q->z) + 2*(q->w)*(q->y);
@@ -39,12 +15,10 @@ void get_rotation_from_quaternion(Quaternion* q, float R[3][3])
 	R[2][0] = 2*(q->x)*(q->z) - 2*(q->w)*(q->y);
 	R[2][1] = 2*(q->w)*(q->x) + 2*(q->y)*(q->z);
 	R[2][2] = 1 - 2*(q->x)*(q->x) - 2*(q->y)*(q->y);
-
 }
 
 void get_rotation_from_euler_angles(float angles[3], float R[3][3])
 {
-
 	float phi   = angles[0];
 	float theta = angles[1];
 	float psi   = angles[2];
@@ -69,6 +43,27 @@ void get_rotation_from_euler_angles(float angles[3], float R[3][3])
 	R[2][0] = -sin_theta;
 	R[2][1] = sin_phi * cos_theta;
 	R[2][2] = cos_phi * cos_theta;
+}
+
+
+void  get_omega_body_frame(float angles_rates[3], float angles[3], float W[3])
+{
+	float phi = angles[0];
+	float theta = angles [1];
+
+	float sin_phi = sinf(phi);
+	float cos_phi = cosf(phi);
+
+	float cos_theta = cosf(theta);
+	float sin_theta = sinf(theta);
+
+	float phi_dot   = angles_rates[0];
+	float theta_dot = angles_rates[1];
+	float psi_dot   = angles_rates[2];
+
+	W[0] = phi_dot - psi_dot*sin_theta;
+	W[1] = psi_dot*sin_theta*cos_theta + theta_dot*cos_theta;
+	W[2] = psi_dot*cos_phi*cos_theta - theta_dot*sin_phi;
 }
 
 // e_r
@@ -106,7 +101,4 @@ void get_omega_error(float W[3], float W_d[3], float R_d[3][3], float R[3][3], f
 	result[0] = W[0] - (RTRd[0][0]*W_d[0] + RTRd[0][1]*W_d[1] + RTRd[0][2]*W_d[2]);
 	result[1] = W[1] - (RTRd[1][0]*W_d[0] + RTRd[1][1]*W_d[1] + RTRd[1][2]*W_d[2]);
 	result[2] = W[2] - (RTRd[2][0]*W_d[0] + RTRd[2][1]*W_d[1] + RTRd[2][2]*W_d[2]);
-
 }
-
-
