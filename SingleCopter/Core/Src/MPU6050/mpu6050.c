@@ -294,30 +294,33 @@ void DMP_Init(void) {
  返回  值：无
  作    者：平衡小车之家
  **************************************************************************/
-void Read_DMP(void) {
+void Read_DMP(void)
+{
   unsigned long sensor_timestamp;
   unsigned char more;
   long quat[4];
 
   dmp_read_fifo(gyro, accel, quat, &sensor_timestamp, &sensors, &more);
-  if (sensors & INV_WXYZ_QUAT) {
+
+  if (sensors & INV_WXYZ_QUAT)
+  {
     q0 = quat[0] / q30;   // w
     q1 = quat[1] / q30;   // x
     q2 = quat[2] / q30;   // y
     q3 = quat[3] / q30;   // z
 
-    // Formulas from: https://www.sedris.org/wg8home/Documents/WG80485.pdf, page 39
-    phi   = atan2f(q0 * q1 +  q2 * q3, 0.5 - (q1 * q1 + q2 * q2) );
-    theta = asinf(2  * (q0 * q2 - q3 * q1 )); // TODO
-    psi   = atan2f(q0 * q3 + q1* q2, 0.5 - 1 * (q2 * q2 + q3 * q3)   );
-
+    float s = -1.0; // The minus sign is added to match the graph printed on the board.
+    // Rotation X - Y - Z (R = Rz * Ry * Rx)
+    // The quaternion is q = qz*qy*qx operator
+    // https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
+	phi   = s*atan2f(q0 * q1 +  q2 * q3, 0.5 - (q1 * q1 + q2 * q2));
+	theta = s*asinf(2  * (q0 * q2 - q3 * q1 )); //
+	psi   = s*atan2f(q0 * q3 + q1* q2, 0.5 - (q2 * q2 + q3 * q3)   );
     // angle in degrees:
     roll  = rad2deg(phi);
     pitch = rad2deg(theta);
     yaw   = rad2deg(psi);
-
   }
-
 }
 
 /**************************************************************************
