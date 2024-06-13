@@ -62,7 +62,7 @@ void  get_omega_body_frame(float angles_rates[3], float angles[3], float W[3])
 	float psi_dot   = angles_rates[2];
 
 	W[0] = phi_dot - psi_dot*sin_theta;
-	W[1] = psi_dot*sin_theta*cos_theta + theta_dot*cos_theta;
+	W[1] = psi_dot*sin_phi*cos_theta + theta_dot*cos_theta;
 	W[2] = psi_dot*cos_phi*cos_theta - theta_dot*sin_phi;
 }
 

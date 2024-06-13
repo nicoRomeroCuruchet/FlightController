@@ -374,6 +374,7 @@ void DMP_Init(void);
 void Read_DMP(void);
 void DMP_get_gyro_offsets(float* gx_offset, float* gy_offset, float* gz_offset);
 void Calubration_DMP(void);
+void DMP_get_gravity(void);
 int Read_Temperature(void);
 
 #ifdef __cplusplus

@@ -32,7 +32,8 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define LSB_Sensitivity 16.4	// Gyro degrees conversions
-#define ALPHA 0.3  				// Gyro low pass filter
+#define ALPHA 1.0  				// Gyro low pass filter (1.0 no filter, raw data)
+#define GYRO_SING -1.0
 #define SAMPLE_TIME_S 0.005f 	// 200 Hz
 /* Controller parameters */
 /***********************************************************/
@@ -98,12 +99,13 @@
 #define MAP(input, in_min, in_max, out_min, out_max) \
     (((input) - (in_min)) * ((out_max) - (out_min)) / ((in_max) - (in_min)) + (out_min))
 
-
+#define M_PI 3.14159265358979323846
+#define deg2rad(degrees) degrees * M_PI / 180.0
+#define rad2deg(radians) radians * 180.0 / M_PI
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
-
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim3;
 
@@ -111,8 +113,10 @@ TIM_HandleTypeDef htim3;
 extern float q0, q1, q2, q3;
 extern float pitch, roll, yaw;
 extern short gyro[3];
+extern float gravity[3];
 float gx, gy, gz;
 float gx_angle, gy_angle, gz_angle;
+float gyro_roll, gyro_pitch, gyro_yaw;
 uint32_t loop_timer;
 /* Measure Width */
 
@@ -160,6 +164,9 @@ float throttle_radio=0;
 
 /* Measure Frequency */
 volatile float frequency = 0;
+
+float angles[3], angles_rates[3];
+float omega_body[3];
 
 /* USER CODE END PV */
 
@@ -230,11 +237,11 @@ int main(void)
   	 Error_Handler();
   }
 
-  while(usWidth_ch1 < 950 || usWidth_ch2 < 950 || usWidth_ch3 < 950 || usWidth_ch4 < 950)
-	  __HAL_TIM_SET_COUNTER(&htim1, 0);  // reset the counter
+  //while(usWidth_ch1 < 950 || usWidth_ch2 < 950 || usWidth_ch3 < 950 || usWidth_ch4 < 950)
+	//  __HAL_TIM_SET_COUNTER(&htim1, 0);  // reset the counter
 
-  while(usWidth_ch1>2000 || usWidth_ch2>2000 || usWidth_ch3>2000 || usWidth_ch4>2000)
-	__HAL_TIM_SET_COUNTER(&htim1, 0);  // reset the counter
+  //while(usWidth_ch1>2000 || usWidth_ch2>2000 || usWidth_ch3>2000 || usWidth_ch4>2000)
+	//__HAL_TIM_SET_COUNTER(&htim1, 0);  // reset the counter
 
   /*Initialize PWM motors and servos */
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);  			/* Servo Roll  */
@@ -311,10 +318,14 @@ int main(void)
 	loop_timer = HAL_GetTick();
 	Read_DMP();
 	// get angle rates degrees / seconds with an exponential filter
-	rate_roll  = (1-ALPHA)*rate_roll  + ALPHA*((((float)gyro[0]) - gx_offset) / LSB_Sensitivity);
-	rate_pitch = (1-ALPHA)*rate_pitch + ALPHA*((((float)gyro[1]) - gy_offset) / LSB_Sensitivity);
-	rate_yaw   = (1-ALPHA)*rate_yaw   + ALPHA*((((float)gyro[2]) - gz_offset) / LSB_Sensitivity);
+	rate_roll  = GYRO_SING*((1-ALPHA)*rate_roll  + ALPHA*((((float)gyro[0]) - gx_offset) / LSB_Sensitivity));
+	rate_pitch = GYRO_SING*((1-ALPHA)*rate_pitch + ALPHA*((((float)gyro[1]) - gy_offset) / LSB_Sensitivity));
+	rate_yaw   = GYRO_SING*((1-ALPHA)*rate_yaw   + ALPHA*((((float)gyro[2]) - gz_offset) / LSB_Sensitivity));
 	yaw -= yaw_offset;
+
+	gyro_roll  +=rate_roll*SAMPLE_TIME_S;
+	gyro_pitch +=rate_pitch*SAMPLE_TIME_S;
+	gyro_yaw   +=rate_yaw*SAMPLE_TIME_S;
 
 	throttle_radio = usWidth_ch1;
 	//setpoints
@@ -347,6 +358,14 @@ int main(void)
 	htim3.Instance->CCR2 = (uint32_t)CLIP(SERVO_PITCH_CENTER + pid_pitch_output, SERVO_PITCH_MIN, SERVO_PITCH_MAX);      /* Channel 2 serve pitch */
 	htim3.Instance->CCR3 = (uint32_t)CLIP(throttle_radio + pid_yaw_output, DUTY_CYCLE_MOTOR_MIN, DUTY_CYCLE_MOTOR_MAX);  /* Channel 3 motor CW    */
 	htim3.Instance->CCR4 = (uint32_t)CLIP(throttle_radio - pid_yaw_output, DUTY_CYCLE_MOTOR_MIN, DUTY_CYCLE_MOTOR_MAX);  /* Channel 4 motor CCW   */
+
+	angles_rates[0] = deg2rad(rate_roll);
+	angles_rates[1] = deg2rad(rate_pitch);
+	angles_rates[2] = deg2rad(rate_yaw);
+	angles[0] = deg2rad(roll);
+	angles[1] = deg2rad(pitch);
+
+	get_omega_body_frame(angles_rates, angles, omega_body);
 	measure_time = HAL_GetTick() - loop_timer;
 	//integrate the pitch, roll, yaw angle every 5 milliseconds.
 	while (HAL_GetTick() - loop_timer < sec2milliseconds(SAMPLE_TIME_S));

@@ -29,6 +29,7 @@ float phi, theta, psi;
 float pitch, roll, yaw;
 float q0 = 1.0f, q1 = 0.0f, q2 = 0.0f, q3 = 0.0f;
 float dcm[3][3];
+float gravity[3];
 static signed char gyro_orientation[9] = { -1, 0, 0, 0, -1, 0, 0, 0, 1 };
 
 static unsigned short inv_row_2_scale(const signed char *row) {
@@ -316,6 +317,7 @@ void Read_DMP(void)
 	phi   = s*atan2f(q0 * q1 +  q2 * q3, 0.5 - (q1 * q1 + q2 * q2));
 	theta = s*asinf(2  * (q0 * q2 - q3 * q1 )); //
 	psi   = s*atan2f(q0 * q3 + q1* q2, 0.5 - (q2 * q2 + q3 * q3)   );
+
     // angle in degrees:
     roll  = rad2deg(phi);
     pitch = rad2deg(theta);
@@ -366,8 +368,19 @@ void DMP_get_gyro_offsets(float* gx_offset, float* gy_offset, float* gz_offset)
 	  *gx_offset=*gx_offset/100;
 	  *gy_offset=*gy_offset/100;
 	  *gz_offset=*gz_offset/100;
+
+	  return;
 }
 
+
+void DMP_get_gravity(void){
+
+	gravity[0] = 2*(q1*q3 - q0*q2);
+	gravity[1] = 2*(q0*q1 + q2*q3);
+	gravity[2] = q0*q0 - q1*q1 - q2*q2 + q3*q3;
+
+	return;
+}
 
 /**************************************************************************
  Function: Read MPU6050 built-in temperature sensor data
