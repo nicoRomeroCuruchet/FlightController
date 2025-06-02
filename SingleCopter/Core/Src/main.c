@@ -39,8 +39,8 @@
 /***********************************************************/
 /************************** Roll **************************/
 /***********************************************************/
-#define kp_roll  1.8f
-#define ki_roll  0.04f
+#define kp_roll  10.8f
+#define ki_roll  0.0f
 #define kd_roll  18.0f * SAMPLE_TIME_S
 
 #define PID_LIM_MIN_INT_ROLL -50.0f
@@ -102,12 +102,16 @@
 #define M_PI 3.14159265358979323846
 #define deg2rad(degrees) degrees * M_PI / 180.0
 #define rad2deg(radians) radians * 180.0 / M_PI
+
+#define TRANSMITED_BYTES 12
+
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim3;
+UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 extern float q0, q1, q2, q3;
@@ -145,28 +149,30 @@ volatile uint32_t IC_Val2_ch4      = 0;
 volatile uint32_t difference_ch4   = 0;
 volatile int is_first_captured_ch4 = 0;
 
-float setpoint_roll   =0;
-float setpoint_pitch  =0;
-float setpoint_yaw    =0;
-uint32_t measure_time =0;
+float setpoint_roll   = 0;
+float setpoint_pitch  = 0;
+float setpoint_yaw    = 0;
+uint32_t measure_time = 0;
 
-float pid_roll_output  =0;
-float pid_pitch_output =0;
-float pid_yaw_output   =0;
+float pid_roll_output  = 0;
+float pid_pitch_output = 0;
+float pid_yaw_output   = 0;
 
-float rate_roll=0;
-float rate_pitch=0;
-float rate_yaw=0;
+float rate_roll = 0;
+float rate_pitch = 0;
+float rate_yaw = 0;
 
-float yaw_offset;
-
-float throttle_radio=0;
+float throttle_radio = 0;
 
 /* Measure Frequency */
 volatile float frequency = 0;
 
 float angles[3], angles_rates[3];
 float omega_body[3];
+
+int turn_on = 0;
+uint8_t rx_buffer[TRANSMITED_BYTES];
+float received_values[3]; // To store the result
 
 /* USER CODE END PV */
 
@@ -176,6 +182,7 @@ static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_TIM1_Init(void);
+static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -191,7 +198,6 @@ static void MX_TIM1_Init(void);
   */
 int main(void)
 {
-
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
@@ -217,45 +223,59 @@ int main(void)
   MX_I2C1_Init();
   MX_TIM3_Init();
   MX_TIM1_Init();
+  MX_USART2_UART_Init();
+  HAL_UART_Receive_IT(&huart2, rx_buffer, TRANSMITED_BYTES);
   /* USER CODE BEGIN 2 */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
 
-  if (HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_1) != HAL_OK) // Throttle
+  if (HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_1) != HAL_OK) // Throttle ---> radio ch3
   {
 	 Error_Handler();
   }
-  if (HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_2) != HAL_OK) // Pitch
+  if (HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_2) != HAL_OK) //Yaw ---> radio ch4
   {
      Error_Handler();
   }
-  if (HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_3) != HAL_OK) // Roll
+  if (HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_3) != HAL_OK) // Pitch --> radio ch2
   {
   	 Error_Handler();
   }
-  if (HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_4) != HAL_OK) // Yaw
+  if (HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_4) != HAL_OK) // Roll ---> radio ch1
   {
   	 Error_Handler();
   }
 
-  //while(usWidth_ch1 < 950 || usWidth_ch2 < 950 || usWidth_ch3 < 950 || usWidth_ch4 < 950)
-	//  __HAL_TIM_SET_COUNTER(&htim1, 0);  // reset the counter
+  /*HAL_Delay(150);
+  while(usWidth_ch1 < 950 || usWidth_ch2 < 950 || usWidth_ch3 < 950 || usWidth_ch4 < 950)
+  {
+	  __HAL_TIM_SET_COUNTER(&htim1, 0);  // reset the counter
+	  usWidth_ch1=usWidth_ch2=usWidth_ch3=usWidth_ch4=0;
+	  HAL_Delay(250);
+  }
 
-  //while(usWidth_ch1>2000 || usWidth_ch2>2000 || usWidth_ch3>2000 || usWidth_ch4>2000)
-	//__HAL_TIM_SET_COUNTER(&htim1, 0);  // reset the counter
+  while(usWidth_ch1>2000 || usWidth_ch2>2000 || usWidth_ch3>2000 || usWidth_ch4>2000)
+  {
+	  __HAL_TIM_SET_COUNTER(&htim1, 0);  // reset the counter
+	  usWidth_ch1=usWidth_ch2=usWidth_ch3=usWidth_ch4=0;
+	  HAL_Delay(250);
+  }*/
 
   /*Initialize PWM motors and servos */
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);  			/* Servo Roll  */
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);  			/* Servo Pitch */
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3); 		 	/* Motor CW    */
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);  			/* Motor CCW   */
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);  			/* Motor 1 */
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);  			/* Motor 2 */
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3); 		 	/* Motor 3 */
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);  			/* Motor 4 */
+  HAL_Delay(150);
  /*turn off motors and center servos */
-  htim3.Instance->CCR1 = (uint32_t)SERVO_PITCH_CENTER; 	 	 /*  Channel 1 servo Pitch         */
-  htim3.Instance->CCR2 = (uint32_t)SERVO_ROLL_CENTER;	     /*  Channel 2 servo Roll          */
-  htim3.Instance->CCR3 = (uint32_t)DUTY_CYCLE_TURNOFF;	     /*  Channel 3 motor CW    */
-  htim3.Instance->CCR4 = (uint32_t)DUTY_CYCLE_TURNOFF;	     /*  Channel 4 motor CCW   */
+  htim3.Instance->CCR1 = (uint32_t)SERVO_PITCH_CENTER;  /*  Channel 1 Motor 1 */
+  htim3.Instance->CCR2 = (uint32_t)SERVO_ROLL_CENTER;   /*  Channel 2 Motor 2 */
+  htim3.Instance->CCR3 = (uint32_t)DUTY_CYCLE_TURNOFF;  /*  Channel 3 Motor 3 */
+  htim3.Instance->CCR4 = (uint32_t)DUTY_CYCLE_TURNOFF;  /*  Channel 4 Motor 4 */
+
   /* DMP MPU initialize */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
   HAL_Delay(150);
+
   do{
 	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
 	  HAL_Delay(150);
@@ -263,6 +283,7 @@ int main(void)
 	  HAL_Delay(150);
 
   } while(MPU6050_getDeviceID() != 0x68);
+
   DMP_Init();
   // Wait 10s for calibration, don't move the IMU!
   Calubration_DMP();
@@ -304,11 +325,19 @@ int main(void)
 				  PID_LIM_MIN_YAW,
 				  PID_LIM_MAX_YAW);
 
-  do{
+  float yaw_offset, roll_offset, pitch_offset;
+
+  do
+  {
 	  Read_DMP();
-	  yaw_offset = yaw;
+	  yaw_offset   = yaw;
+	  roll_offset  = roll;
+	  pitch_offset = pitch;
   }
-  while (usWidth_ch1> 1100);
+  while (usWidth_ch1 > 1100); // throttle upper 1050 don't start!
+
+  // radio Throttle --> usWidth_ch1
+  // radio Yaw --> usWidth_ch2
 
   while (1)
   {
@@ -322,7 +351,9 @@ int main(void)
 	rate_pitch = GYRO_SING*((1-ALPHA)*rate_pitch + ALPHA*((((float)gyro[1]) - gy_offset) / LSB_Sensitivity));
 	rate_yaw   = GYRO_SING*((1-ALPHA)*rate_yaw   + ALPHA*((((float)gyro[2]) - gz_offset) / LSB_Sensitivity));
 	yaw -= yaw_offset;
-
+	roll -=roll_offset;
+	pitch-=pitch_offset;
+	//TODO only for debug:
 	gyro_roll  +=rate_roll*SAMPLE_TIME_S;
 	gyro_pitch +=rate_pitch*SAMPLE_TIME_S;
 	gyro_yaw   +=rate_yaw*SAMPLE_TIME_S;
@@ -336,38 +367,42 @@ int main(void)
 		setpoint_yaw = MAP(setpoint_yaw, -500.0, +500.0,-20.0,20.0);
 	}
 
-	setpoint_pitch = RADIO_MIDDLE_FREQ - (float)usWidth_ch3;
-	if (abs(setpoint_pitch)< RADIO_DEAD_BAND){
-		setpoint_pitch=0.0;
-	} else{
-		setpoint_pitch = MAP(setpoint_pitch, -500.0, +500.0,-20.0,20.0);
-	}
-
-	setpoint_roll  = RADIO_MIDDLE_FREQ - (float)usWidth_ch4;
+	setpoint_roll  = RADIO_MIDDLE_FREQ - (float)usWidth_ch3;
 	if (abs(setpoint_roll)< RADIO_DEAD_BAND){
 		setpoint_roll=0.0;
 	} else{
 		setpoint_roll = MAP(setpoint_roll, -500.0, +500.0,-20.0,20.0);
+	}
+
+	setpoint_pitch = RADIO_MIDDLE_FREQ - (float)usWidth_ch4;
+	if (abs(setpoint_pitch)< RADIO_DEAD_BAND){
+		setpoint_pitch=0.0;
+	} else{
+		setpoint_pitch = MAP(setpoint_pitch, -500.0, +500.0,+20.0,-20.0);
 	}
 	// Feedback loop control
 	pid_yaw_output   = updatePID(&pid_yaw, setpoint_yaw, yaw, rate_yaw);
 	pid_pitch_output = updatePID(&pid_pitch, setpoint_pitch, pitch, rate_pitch);
 	pid_roll_output  = updatePID(&pid_roll, setpoint_roll, roll, rate_roll);
 	/* set PWM Duty cycle */
-	htim3.Instance->CCR1 = (uint32_t)CLIP(SERVO_ROLL_CENTER + pid_roll_output,   SERVO_ROLL_MIN,  SERVO_ROLL_MAX);       /* Channel 1 serve roll  */
-	htim3.Instance->CCR2 = (uint32_t)CLIP(SERVO_PITCH_CENTER + pid_pitch_output, SERVO_PITCH_MIN, SERVO_PITCH_MAX);      /* Channel 2 serve pitch */
-	htim3.Instance->CCR3 = (uint32_t)CLIP(throttle_radio + pid_yaw_output, DUTY_CYCLE_MOTOR_MIN, DUTY_CYCLE_MOTOR_MAX);  /* Channel 3 motor CW    */
-	htim3.Instance->CCR4 = (uint32_t)CLIP(throttle_radio - pid_yaw_output, DUTY_CYCLE_MOTOR_MIN, DUTY_CYCLE_MOTOR_MAX);  /* Channel 4 motor CCW   */
+	if (turn_on == 0 && usWidth_ch1 < 1080 && usWidth_ch2 > 1850) turn_on = 1;
+	if (turn_on == 1 && usWidth_ch1 < 1080 && usWidth_ch2 < 1050) turn_on = 0;
+	if(turn_on)
+	{
+		htim3.Instance->CCR1 = (uint32_t)CLIP(SERVO_ROLL_CENTER + pid_roll_output,   SERVO_ROLL_MIN,  SERVO_ROLL_MAX);       /* Channel 1 serve roll  */
+		htim3.Instance->CCR2 = (uint32_t)CLIP(SERVO_PITCH_CENTER + pid_pitch_output, SERVO_PITCH_MIN, SERVO_PITCH_MAX);      /* Channel 2 serve pitch */
+		htim3.Instance->CCR3 = (uint32_t)CLIP(throttle_radio + pid_yaw_output, DUTY_CYCLE_MOTOR_MIN, DUTY_CYCLE_MOTOR_MAX);  /* Channel 3 motor CW    */
+		htim3.Instance->CCR4 = (uint32_t)CLIP(throttle_radio - pid_yaw_output, DUTY_CYCLE_MOTOR_MIN, DUTY_CYCLE_MOTOR_MAX);  /* Channel 4 motor CCW   */
+	}
+	else
+	{
+		htim3.Instance->CCR1 = (uint32_t)SERVO_PITCH_CENTER; 	/*  Channel 1 servo Pitch */
+		htim3.Instance->CCR2 = (uint32_t)SERVO_ROLL_CENTER;	    /*  Channel 2 servo Roll  */
+		htim3.Instance->CCR3 = (uint32_t)DUTY_CYCLE_TURNOFF;	/*  Channel 3 motor CW    */
+		htim3.Instance->CCR4 = (uint32_t)DUTY_CYCLE_TURNOFF;    /*  Channel 4 motor CCW   */
+	}
 
-	angles_rates[0] = deg2rad(rate_roll);
-	angles_rates[1] = deg2rad(rate_pitch);
-	angles_rates[2] = deg2rad(rate_yaw);
-	angles[0] = deg2rad(roll);
-	angles[1] = deg2rad(pitch);
-
-	get_omega_body_frame(angles_rates, angles, omega_body);
 	measure_time = HAL_GetTick() - loop_timer;
-	//integrate the pitch, roll, yaw angle every 5 milliseconds.
 	while (HAL_GetTick() - loop_timer < sec2milliseconds(SAMPLE_TIME_S));
   }
   /* USER CODE END 3 */
@@ -594,6 +629,39 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 2 */
   HAL_TIM_MspPostInit(&htim3);
+
+}
+
+/**
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART2_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART2_Init 0 */
+
+  /* USER CODE END USART2_Init 0 */
+
+  /* USER CODE BEGIN USART2_Init 1 */
+
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 115200;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
+
+  /* USER CODE END USART2_Init 2 */
 
 }
 

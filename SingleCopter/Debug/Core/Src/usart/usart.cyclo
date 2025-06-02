@@ -1,0 +1,2 @@
+../Core/Src/usart/usart.c:20:6:HAL_UART_RxCpltCallback	2
+../Core/Src/usart/usart.c:34:6:HAL_UART_TxCpltCallback	1

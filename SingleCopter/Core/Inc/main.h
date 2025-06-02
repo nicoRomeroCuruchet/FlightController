@@ -34,6 +34,7 @@ extern "C" {
 #include "MPU6050/mpu6050.h"
 #include "PID/PID.h"
 #include "Quaternion/quaternion_utils.h"
+#include "usart/usart.h"
 #include <math.h>
 #include <stdlib.h>
 /* USER CODE END Includes */
