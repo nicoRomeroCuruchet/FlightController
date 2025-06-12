@@ -13,8 +13,10 @@ RM := rm -rf
 -include Core/Startup/subdir.mk
 -include Core/Src/usart/subdir.mk
 -include Core/Src/Quaternion/subdir.mk
+-include Core/Src/QMC5883/subdir.mk
 -include Core/Src/PID/subdir.mk
 -include Core/Src/MPU6050/subdir.mk
+-include Core/Src/BMP280/subdir.mk
 -include Core/Src/subdir.mk
 -include objects.mk
 

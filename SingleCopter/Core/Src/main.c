@@ -109,11 +109,16 @@
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
+
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim3;
+
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
+
+float temperature, pressure, humidity, altitude;
+
 extern float q0, q1, q2, q3;
 extern float pitch, roll, yaw;
 extern short gyro[3];
@@ -174,6 +179,9 @@ int turn_on = 0;
 uint8_t rx_buffer[TRANSMITED_BYTES];
 float received_values[3]; // To store the result
 
+
+QMC_t pusula_sensor;
+float Compas_Value;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -198,6 +206,7 @@ static void MX_USART2_UART_Init(void);
   */
 int main(void)
 {
+
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
@@ -224,8 +233,29 @@ int main(void)
   MX_TIM3_Init();
   MX_TIM1_Init();
   MX_USART2_UART_Init();
-  HAL_UART_Receive_IT(&huart2, rx_buffer, TRANSMITED_BYTES);
   /* USER CODE BEGIN 2 */
+
+
+  QMC_init(&pusula_sensor, &hi2c1, 200);
+  BMP280_HandleTypedef bmp280;
+  bmp280_init_default_params(&bmp280.params);
+  bmp280.addr = BMP280_I2C_ADDRESS_0;
+  bmp280.i2c = &hi2c1;
+
+  while (!bmp280_init(&bmp280, &bmp280.params)) {
+	  HAL_Delay(2000);
+  }
+
+
+  while(1){
+
+	  while (!bmp280_read_float(&bmp280, &temperature, &pressure, &humidity)) {
+		  HAL_Delay(2000);
+	  }
+	  altitude = 44330.0f * (1.0f - powf(pressure / 101325 , 1.0f / 5.255f));
+
+  }
+
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
 
   if (HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_1) != HAL_OK) // Throttle ---> radio ch3

@@ -22,8 +22,10 @@ C_DEPS :=
 
 # Every subdirectory with source files must be described here
 SUBDIRS := \
+Core/Src/BMP280 \
 Core/Src/MPU6050 \
 Core/Src/PID \
+Core/Src/QMC5883 \
 Core/Src/Quaternion \
 Core/Src \
 Core/Src/usart \
