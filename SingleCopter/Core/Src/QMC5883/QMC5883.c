@@ -24,9 +24,14 @@ uint8_t QMC_init(QMC_t *qmc,I2C_HandleTypeDef *i2c,uint8_t Output_Data_Rate)
 
 	if(HAL_I2C_Mem_Write(qmc->i2c, 0x1A, 0x0B, 1, &array[0], 1, 100)!=HAL_OK)
 		return 1;
-	if(HAL_I2C_Mem_Write(qmc->i2c, 0x1A, 0x09, 1, &array[1], 1, 100)!=HAL_OK)
-		return 1;
-
+	//if(HAL_I2C_Mem_Write(qmc->i2c, 0x1A, 0x09, 1, &array[1], 1, 100)!=HAL_OK)
+	//	return 1;
+	//if(HAL_I2C_Mem_Write(qmc->i2c, 0x1A, 0x09, 1, &array[1], 1, 100)!=HAL_OK)
+	//	return 1;
+	uint8_t config =  0x1D;
+	HAL_StatusTypeDef status = HAL_I2C_Mem_Write(qmc->i2c, 0x1A, 0x09, 1, &config, 1, 100);
+	if (status != HAL_OK)
+		return -1;
 	return 0;
 }
 
