@@ -180,7 +180,7 @@ uint8_t rx_buffer[TRANSMITED_BYTES];
 float received_values[3]; // To store the result
 
 
-QMC_t pusula_sensor;
+QMC_t module;
 float Compas_Value;
 /* USER CODE END PV */
 
@@ -236,7 +236,21 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
 
-  QMC_init(&pusula_sensor, &hi2c1, 200);
+
+  QMC_init(&module, &hi2c1, 200);
+
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
+  while (1)
+  {
+
+	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
+	QMC_read(&module);
+	Compas_Value=module.heading;
+  	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
+  	QMC_read(&module);
+  }
+
+
   BMP280_HandleTypedef bmp280;
   bmp280_init_default_params(&bmp280.params);
   bmp280.addr = BMP280_I2C_ADDRESS_0;
