@@ -10,7 +10,7 @@ typedef struct {
     float Kp;                  // Proportional gain
     float Ki;                  // Integral gain
     float Kd;                  // Derivative gain
-    float T;                   // Sampling period
+    float delta_T;             // Sample time (in seconds)
     float prev_error;          // Previous error
     float prev_setpoint;	   //
     float integral;            // Integral term
@@ -20,7 +20,7 @@ typedef struct {
     float min_output_limit;	   // min PID limit
     float max_output_limit;	   // max PID limit
     float tau; 				   // Derivate filte
-
+    float filter;              // Derivative filter coefficient
 } PIDController;
 
 void initializePID(PIDController *pid,
@@ -34,5 +34,7 @@ void initializePID(PIDController *pid,
 				   float max_output_limit);
 
 float updatePID(PIDController *pid, float setpoint, float measurement, float measurement_dot);
+
+void resetPID(PIDController *pid);
 
 #endif

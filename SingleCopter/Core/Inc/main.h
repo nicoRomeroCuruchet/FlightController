@@ -31,8 +31,9 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "QMC5883/QMC5883.h"
 #include "MPU6050/mpu6050.h"
-#include <QMC5883/QMC5883.h>
+#include "RC/rc.h"
 #include "BMP280/BMP280.h"
 #include "PID/PID.h"
 #include "Quaternion/quaternion_utils.h"

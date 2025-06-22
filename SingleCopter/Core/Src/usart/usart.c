@@ -10,25 +10,26 @@
 #include "main.h"
 #include <string.h>  // para memcpy
 
-#define TRANSMITED_BYTES 12
-
-extern UART_HandleTypeDef huart2;
-
+#define TRANSMITED_BYTES 9*4
 extern uint8_t rx_buffer[TRANSMITED_BYTES];
-extern float received_values[3];
+extern float received_values[9];
+
+
+typedef struct __attribute__((packed)) {
+    float roll;
+    float pitch;
+    float yaw;
+} PIDState;
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-    if (huart->Instance == USART2)
-    {
-        memcpy(received_values, rx_buffer, TRANSMITED_BYTES);
-
-        float p = received_values[0];
-        float i = received_values[1];
-        float d = received_values[2];
-
-        HAL_UART_Receive_IT(huart, rx_buffer, TRANSMITED_BYTES);
-    }
+        if (huart->Instance == USART2)
+        {
+            // Immediately prepare next reception
+            HAL_UART_Receive_IT(huart, rx_buffer, TRANSMITED_BYTES);
+            // Convert raw bytes into floats
+			memcpy(received_values, rx_buffer, TRANSMITED_BYTES);
+        }
 }
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef* huart)

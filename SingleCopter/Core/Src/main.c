@@ -31,17 +31,18 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define LSB_Sensitivity 16.4	// Gyro degrees conversions
+
+#define LSB_Sensitivity 131.0f // 65.5f	// Gyro degrees conversions
 #define ALPHA 1.0  				// Gyro low pass filter (1.0 no filter, raw data)
 #define GYRO_SING -1.0
-#define SAMPLE_TIME_S 0.005f 	// 200 Hz
+#define SAMPLE_TIME_S 0.001f 	// 1Khz!
 /* Controller parameters */
 /***********************************************************/
-/************************** Roll **************************/
+/************************** ROLL **************************/
 /***********************************************************/
-#define kp_roll  10.8f
+#define kp_roll  1.0f
 #define ki_roll  0.0f
-#define kd_roll  18.0f * SAMPLE_TIME_S
+#define kd_roll  0.0f
 
 #define PID_LIM_MIN_INT_ROLL -50.0f
 #define PID_LIM_MAX_INT_ROLL +50.0f
@@ -49,7 +50,7 @@
 #define PID_LIM_MIN_ROLL -400.0f
 #define PID_LIM_MAX_ROLL +400.0f
 /***********************************************************/
-/************************** Pitch **************************/
+/************************** PITCH **************************/
 /***********************************************************/
 #define kp_pitch kp_roll
 #define ki_pitch ki_roll
@@ -61,7 +62,7 @@
 #define PID_LIM_MIN_PITCH PID_LIM_MIN_ROLL
 #define PID_LIM_MAX_PITCH PID_LIM_MAX_ROLL
 /***********************************************************/
-/************************** Yaw ****************************/
+/************************** YAW ****************************/
 /***********************************************************/
 #define kp_yaw  1.0f
 #define ki_yaw  0.0f
@@ -74,27 +75,16 @@
 #define PID_LIM_MAX_YAW +400.0f
 /**********************************************************/
 /**********************************************************/
-#define SERVO_PITCH_CENTER 1550
-#define SERVO_PITCH_MAX 1800
-#define SERVO_PITCH_MIN 1100
+#define MOTOR_TURN_OFF 1000
+#define MOTOR_MAX_SPEED 2000
+#define MOTOR_MIN_SPEED 1100
 
-#define SERVO_ROLL_CENTER 1530
-#define SERVO_ROLL_MAX SERVO_PITCH_MAX
-#define SERVO_ROLL_MIN SERVO_PITCH_MIN
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define DUTY_CYCLE_TURNOFF 1000
-#define DUTY_CYCLE_MOTOR_MIN 1200
-#define DUTY_CYCLE_MOTOR_MAX 2000
-
-#define TIMCLOCK   84000000
-#define PRESCALAR  83
-#define AUTORELOAD 20000
-
 #define RADIO_MIDDLE_FREQ 1500.0f
-#define RADIO_DEAD_BAND 8.0f
+#define RADIO_DEAD_BAND 20.0f
 
 #define MAP(input, in_min, in_max, out_min, out_max) \
     (((input) - (in_min)) * ((out_max) - (out_min)) / ((in_max) - (in_min)) + (out_min))
@@ -103,12 +93,13 @@
 #define deg2rad(degrees) degrees * M_PI / 180.0
 #define rad2deg(radians) radians * 180.0 / M_PI
 
-#define TRANSMITED_BYTES 12
+#define TRANSMITED_BYTES 9*4
 
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
+I2C_HandleTypeDef hi2c2;
 
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim3;
@@ -116,6 +107,10 @@ TIM_HandleTypeDef htim3;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
+
+uint8_t rx_buffer[TRANSMITED_BYTES];
+float received_values[9]; // To store the result
+int pid_update_ready=0;
 
 float temperature, pressure, humidity, altitude;
 
@@ -127,32 +122,21 @@ float gx, gy, gz;
 float gx_angle, gy_angle, gz_angle;
 float gyro_roll, gyro_pitch, gyro_yaw;
 uint32_t loop_timer;
-/* Measure Width */
+float yaw_offset, roll_offset, pitch_offset;
+float yaw_w_offset, roll_w_offset, pitch_w_offset;
+float gx_offset, gy_offset, gz_offset;
 
-//CH1
-volatile uint32_t usWidth_ch1      = 0;
-volatile uint32_t IC_Val1_ch1      = 0;
-volatile uint32_t IC_Val2_ch1      = 0;
-volatile uint32_t difference_ch1   = 0;
-volatile int is_first_captured_ch1 = 0;
-//CH2
-volatile uint32_t usWidth_ch2      = 0;
-volatile uint32_t IC_Val1_ch2      = 0;
-volatile uint32_t IC_Val2_ch2      = 0;
-volatile uint32_t difference_ch2   = 0;
-volatile int is_first_captured_ch2 = 0;
-//CH3
-volatile uint32_t usWidth_ch3      = 0;
-volatile uint32_t IC_Val1_ch3      = 0;
-volatile uint32_t IC_Val2_ch3      = 0;
-volatile uint32_t difference_ch3   = 0;
-volatile int is_first_captured_ch3 = 0;
-//CH4
-volatile uint32_t usWidth_ch4      = 0;
-volatile uint32_t IC_Val1_ch4      = 0;
-volatile uint32_t IC_Val2_ch4      = 0;
-volatile uint32_t difference_ch4   = 0;
-volatile int is_first_captured_ch4 = 0;
+
+int16_t gyro_axis[3];
+float gx_2, gy_2, gz_2;
+float gx_2_offset, gy_2_offset, gz_2_offset;
+
+/* Measure Width */
+extern volatile uint32_t pulse_ch1;
+extern volatile uint32_t pulse_ch2;
+extern volatile uint32_t pulse_ch3;
+extern volatile uint32_t pulse_ch4;
+
 
 float setpoint_roll   = 0;
 float setpoint_pitch  = 0;
@@ -169,19 +153,12 @@ float rate_yaw = 0;
 
 float throttle_radio = 0;
 
-/* Measure Frequency */
-volatile float frequency = 0;
 
-float angles[3], angles_rates[3];
-float omega_body[3];
+BMP280_HandleTypedef bmp280;
+QMC_t qmc;
 
-int turn_on = 0;
-uint8_t rx_buffer[TRANSMITED_BYTES];
-float received_values[3]; // To store the result
+float pressure, temperature, humidity;
 
-
-QMC_t module;
-float Compas_Value;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -191,6 +168,7 @@ static void MX_I2C1_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_I2C2_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -233,90 +211,81 @@ int main(void)
   MX_TIM3_Init();
   MX_TIM1_Init();
   MX_USART2_UART_Init();
+  MX_I2C2_Init();
   /* USER CODE BEGIN 2 */
 
-
-
-  QMC_init(&module, &hi2c1, 200);
-
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
-  while (1)
-  {
-
-	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
-	QMC_read(&module);
-	Compas_Value=module.heading;
-  	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
-  	QMC_read(&module);
+  /*do{
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);
+	  HAL_Delay(100);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
+	  bmp280_init_default_params(&bmp280.params);
+	  bmp280.addr = BMP280_I2C_ADDRESS_0;
+	  bmp280.i2c = &hi2c2;
   }
+  while((QMC_init(&qmc, &hi2c2 ,200)==-1) || !bmp280_init(&bmp280, &bmp280.params)) ;
 
-
-  BMP280_HandleTypedef bmp280;
-  bmp280_init_default_params(&bmp280.params);
-  bmp280.addr = BMP280_I2C_ADDRESS_0;
-  bmp280.i2c = &hi2c1;
-
-  while (!bmp280_init(&bmp280, &bmp280.params)) {
-	  HAL_Delay(2000);
-  }
 
 
   while(1){
 
-	  while (!bmp280_read_float(&bmp280, &temperature, &pressure, &humidity)) {
-		  HAL_Delay(2000);
-	  }
-	  altitude = 44330.0f * (1.0f - powf(pressure / 101325 , 1.0f / 5.255f));
-
-  }
-
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
-
-  if (HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_1) != HAL_OK) // Throttle ---> radio ch3
-  {
-	 Error_Handler();
-  }
-  if (HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_2) != HAL_OK) //Yaw ---> radio ch4
-  {
-     Error_Handler();
-  }
-  if (HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_3) != HAL_OK) // Pitch --> radio ch2
-  {
-  	 Error_Handler();
-  }
-  if (HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_4) != HAL_OK) // Roll ---> radio ch1
-  {
-  	 Error_Handler();
-  }
-
-  /*HAL_Delay(150);
-  while(usWidth_ch1 < 950 || usWidth_ch2 < 950 || usWidth_ch3 < 950 || usWidth_ch4 < 950)
-  {
-	  __HAL_TIM_SET_COUNTER(&htim1, 0);  // reset the counter
-	  usWidth_ch1=usWidth_ch2=usWidth_ch3=usWidth_ch4=0;
-	  HAL_Delay(250);
-  }
-
-  while(usWidth_ch1>2000 || usWidth_ch2>2000 || usWidth_ch3>2000 || usWidth_ch4>2000)
-  {
-	  __HAL_TIM_SET_COUNTER(&htim1, 0);  // reset the counter
-	  usWidth_ch1=usWidth_ch2=usWidth_ch3=usWidth_ch4=0;
-	  HAL_Delay(250);
+	  loop_timer = HAL_GetTick();
+	  bmp280_read_float(&bmp280, &temperature,&pressure, &humidity);
+	  QMC_read(&qmc);
+	  measure_time = HAL_GetTick() - loop_timer;
   }*/
 
-  /*Initialize PWM motors and servos */
+  /*Initialize turn off motors */
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);  			/* Motor 1 */
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);  			/* Motor 2 */
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3); 		 	/* Motor 3 */
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);  			/* Motor 4 */
-  HAL_Delay(150);
- /*turn off motors and center servos */
-  htim3.Instance->CCR1 = (uint32_t)SERVO_PITCH_CENTER;  /*  Channel 1 Motor 1 */
-  htim3.Instance->CCR2 = (uint32_t)SERVO_ROLL_CENTER;   /*  Channel 2 Motor 2 */
-  htim3.Instance->CCR3 = (uint32_t)DUTY_CYCLE_TURNOFF;  /*  Channel 3 Motor 3 */
-  htim3.Instance->CCR4 = (uint32_t)DUTY_CYCLE_TURNOFF;  /*  Channel 4 Motor 4 */
+  /*turn off motors and center servos */
+  htim3.Instance->CCR1 = (uint32_t)MOTOR_TURN_OFF;      /*  Channel 1 Motor 1 */
+  htim3.Instance->CCR2 = (uint32_t)MOTOR_TURN_OFF;      /*  Channel 2 Motor 2 */
+  htim3.Instance->CCR3 = (uint32_t)MOTOR_TURN_OFF;      /*  Channel 3 Motor 3 */
+  htim3.Instance->CCR4 = (uint32_t)MOTOR_TURN_OFF;      /*  Channel 4 Motor 4 */
+  // Turn off IMU
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_RESET);
+
+  HAL_UART_Receive_IT(&huart2, rx_buffer, TRANSMITED_BYTES);
+
+  if (HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_1) != HAL_OK) // Throttle ---> radio ch1
+  {
+	 Error_Handler();
+  }
+  if (HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_2) != HAL_OK) //Yaw ---> radio ch2
+  {
+     Error_Handler();
+  }
+
+  if (HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_3) != HAL_OK) // Pitch --> radio ch3
+  {
+  	 Error_Handler();
+  }
+  if (HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_4) != HAL_OK) // Roll ---> radio ch4
+  {
+  	 Error_Handler();
+  }
+
+  HAL_Delay(250);
+
+  while(pulse_ch1 < 950 || pulse_ch2 < 950 || pulse_ch3 < 950 || pulse_ch4 < 950)
+  {
+	  //__HAL_TIM_SET_COUNTER(&htim1, 0);  // reset the counter
+	  pulse_ch1=pulse_ch2=pulse_ch3=pulse_ch4=0;
+	  HAL_Delay(250);
+  }
+
+  while(pulse_ch1>2000 || pulse_ch2>2000 || pulse_ch3>2000 || pulse_ch4>2000)
+  {
+	  __HAL_TIM_SET_COUNTER(&htim1, 0);  // reset the counter
+	  pulse_ch1=pulse_ch2=pulse_ch3=pulse_ch4=0;
+	  HAL_Delay(250);
+  }
 
   /* DMP MPU initialize */
+  HAL_Delay(150);
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
   HAL_Delay(150);
 
@@ -330,58 +299,59 @@ int main(void)
 
   DMP_Init();
   // Wait 10s for calibration, don't move the IMU!
+  HAL_Delay(10000);
   Calubration_DMP();
-  float gx_offset, gy_offset, gz_offset;
+  HAL_Delay(5000);
   DMP_get_gyro_offsets(&gx_offset, &gy_offset, &gz_offset);
+  // Now set the gyro
+  HAL_Delay(100);
+  do{
+      HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_RESET);
+	  HAL_Delay(150);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_SET);
+      HAL_Delay(150);
+  }while(init_gyro_registers() == -1);
+
+  HAL_Delay(1000);
+  gx_2_offset=gy_2_offset=gz_2_offset=0;
+  for (int var = 0; var < 2000; ++var) {
+	  read_gyro_only(gyro_axis);
+	  gx_2_offset += (float)gyro_axis[0];
+	  gy_2_offset += (float)gyro_axis[1];
+	  gz_2_offset += (float)gyro_axis[2];
+  }
+  gx_2_offset /=2000.0f;
+  gy_2_offset /=2000.0f;
+  gz_2_offset /=2000.0f;
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  do {
+
+	Read_DMP();
+	yaw_offset   = yaw;
+	roll_offset  = roll;
+	pitch_offset = pitch;
+	HAL_Delay(100);
+
+  } while (pulse_ch2 > 1100);// throttle upper 1050 don't start
+
   PIDController pid_roll, pid_pitch, pid_yaw;
-  /* PID ROLL */
-  initializePID(&pid_roll,
-		  	  	  kp_roll,
-				  ki_roll,
-				  kd_roll,
-				  SAMPLE_TIME_S,
-				  PID_LIM_MIN_INT_ROLL,
-				  PID_LIM_MAX_INT_ROLL,
-				  PID_LIM_MIN_ROLL,
-				  PID_LIM_MAX_ROLL);
-  /* PID PITCH */
-  initializePID(&pid_pitch,
-  		  	  	  kp_pitch,
-  				  ki_pitch,
-  				  kd_pitch,
-  				  SAMPLE_TIME_S,
-  				  PID_LIM_MIN_INT_PITCH,
-  				  PID_LIM_MAX_INT_PITCH,
-  				  PID_LIM_MIN_PITCH,
-  				  PID_LIM_MAX_PITCH);
-  /* PID YAW */
-  initializePID(&pid_yaw,
-				  kp_yaw,
-				  ki_yaw,
-				  kd_yaw,
-				  SAMPLE_TIME_S,
-				  PID_LIM_MIN_INT_YAW,
-				  PID_LIM_MAX_INT_YAW,
-				  PID_LIM_MIN_YAW,
-				  PID_LIM_MAX_YAW);
+  initializePID(&pid_roll, 1.0, 0.1, 0.0, SAMPLE_TIME_S,
+                PID_LIM_MIN_INT_ROLL, PID_LIM_MAX_INT_ROLL,
+                PID_LIM_MIN_ROLL, PID_LIM_MAX_ROLL);
 
-  float yaw_offset, roll_offset, pitch_offset;
+  initializePID(&pid_pitch, 1.0, 0.5, 0.15, SAMPLE_TIME_S,
+                PID_LIM_MIN_INT_PITCH, PID_LIM_MAX_INT_PITCH,
+                PID_LIM_MIN_PITCH, PID_LIM_MAX_PITCH);
 
-  do
-  {
-	  Read_DMP();
-	  yaw_offset   = yaw;
-	  roll_offset  = roll;
-	  pitch_offset = pitch;
-  }
-  while (usWidth_ch1 > 1100); // throttle upper 1050 don't start!
+  initializePID(&pid_yaw, 0.0, 1.0, 0.0, SAMPLE_TIME_S,
+                PID_LIM_MIN_INT_YAW, PID_LIM_MAX_INT_YAW,
+                PID_LIM_MIN_YAW, PID_LIM_MAX_YAW);
 
-  // radio Throttle --> usWidth_ch1
-  // radio Yaw --> usWidth_ch2
+  gyro_roll=gyro_pitch=gyro_yaw=0.0f;
+  rate_roll=rate_pitch=rate_yaw=0.0f;
 
   while (1)
   {
@@ -390,64 +360,68 @@ int main(void)
     /* USER CODE BEGIN 3 */
 	loop_timer = HAL_GetTick();
 	Read_DMP();
+	yaw_w_offset   = yaw - yaw_offset;  // TODO too much drift...
+	roll_w_offset  = roll - roll_offset;
+	pitch_w_offset = pitch - pitch_offset;
+
+	read_gyro_only(gyro_axis);
+	gx_2 = ((float)gyro_axis[0] - gx_2_offset)  / LSB_Sensitivity;
+	gy_2 = ((float)gyro_axis[1] - gy_2_offset)  / LSB_Sensitivity;
+	gz_2 = ((float)gyro_axis[2] - gz_2_offset)  / LSB_Sensitivity;
+
+	gyro_roll += gx_2*SAMPLE_TIME_S;
+	gyro_pitch += gy_2*SAMPLE_TIME_S;
+	
+	gyro_roll  += gyro_pitch * sin(deg2rad(gz_2) * SAMPLE_TIME_S);
+	gyro_pitch -= gyro_roll * sin(deg2rad(gz_2) * SAMPLE_TIME_S);
+
+	gyro_pitch = gyro_pitch*0.996 + pitch_w_offset*0.004;
+	gyro_roll = gyro_roll*0.996 + roll_w_offset*0.004;
+  
 	// get angle rates degrees / seconds with an exponential filter
-	rate_roll  = GYRO_SING*((1-ALPHA)*rate_roll  + ALPHA*((((float)gyro[0]) - gx_offset) / LSB_Sensitivity));
+	/*rate_roll  = GYRO_SING*((1-ALPHA)*rate_roll  + ALPHA*((((float)gyro[0]) - gx_offset) / LSB_Sensitivity));
 	rate_pitch = GYRO_SING*((1-ALPHA)*rate_pitch + ALPHA*((((float)gyro[1]) - gy_offset) / LSB_Sensitivity));
 	rate_yaw   = GYRO_SING*((1-ALPHA)*rate_yaw   + ALPHA*((((float)gyro[2]) - gz_offset) / LSB_Sensitivity));
-	yaw -= yaw_offset;
-	roll -=roll_offset;
-	pitch-=pitch_offset;
-	//TODO only for debug:
-	gyro_roll  +=rate_roll*SAMPLE_TIME_S;
-	gyro_pitch +=rate_pitch*SAMPLE_TIME_S;
-	gyro_yaw   +=rate_yaw*SAMPLE_TIME_S;
 
-	throttle_radio = usWidth_ch1;
-	//setpoints
-	setpoint_yaw   = RADIO_MIDDLE_FREQ - (float)usWidth_ch2;
+	//TODO only for debug:
+	gyro_roll  +=rate_roll*0.003;//SAMPLE_TIME_S;
+	gyro_roll = gyro_roll*0.996 + roll_w_offset*0.004;
+	gyro_pitch +=rate_pitch*SAMPLE_TIME_S;
+	gyro_pitch = gyro_pitch*0.996 + pitch_w_offset*0.004;*/
+
+	//radio set-points
+	throttle_radio = pulse_ch2;
+	// yaw
+	setpoint_yaw   = RADIO_MIDDLE_FREQ - (float)pulse_ch1;
 	if (abs(setpoint_yaw)< RADIO_DEAD_BAND){
 		setpoint_yaw=0.0;
 	}else{
-		setpoint_yaw = MAP(setpoint_yaw, -500.0, +500.0,-20.0,20.0);
+		float s =  (setpoint_yaw > 0) ? 1.0 : -1.0;
+		setpoint_yaw = MAP(setpoint_yaw - s*RADIO_DEAD_BAND, -500.0, +500.0,-20.0,20.0);
 	}
-
-	setpoint_roll  = RADIO_MIDDLE_FREQ - (float)usWidth_ch3;
+	// roll
+	setpoint_roll  = RADIO_MIDDLE_FREQ - (float)pulse_ch4;
 	if (abs(setpoint_roll)< RADIO_DEAD_BAND){
 		setpoint_roll=0.0;
 	} else{
-		setpoint_roll = MAP(setpoint_roll, -500.0, +500.0,-20.0,20.0);
+		float s =  (setpoint_roll > 0) ? 1.0 : -1.0;
+		setpoint_roll = MAP(setpoint_roll - s*RADIO_DEAD_BAND, -500.0, +500.0,-20.0,20.0);
 	}
-
-	setpoint_pitch = RADIO_MIDDLE_FREQ - (float)usWidth_ch4;
+	// pitch
+	setpoint_pitch = RADIO_MIDDLE_FREQ - (float)pulse_ch3;
 	if (abs(setpoint_pitch)< RADIO_DEAD_BAND){
 		setpoint_pitch=0.0;
 	} else{
-		setpoint_pitch = MAP(setpoint_pitch, -500.0, +500.0,+20.0,-20.0);
+		float s =  (setpoint_pitch > 0) ? 1.0 : -1.0;
+		setpoint_pitch = MAP(setpoint_pitch - s*RADIO_DEAD_BAND, -500.0, +500.0,+20.0,-20.0);
 	}
-	// Feedback loop control
-	pid_yaw_output   = updatePID(&pid_yaw, setpoint_yaw, yaw, rate_yaw);
-	pid_pitch_output = updatePID(&pid_pitch, setpoint_pitch, pitch, rate_pitch);
-	pid_roll_output  = updatePID(&pid_roll, setpoint_roll, roll, rate_roll);
-	/* set PWM Duty cycle */
-	if (turn_on == 0 && usWidth_ch1 < 1080 && usWidth_ch2 > 1850) turn_on = 1;
-	if (turn_on == 1 && usWidth_ch1 < 1080 && usWidth_ch2 < 1050) turn_on = 0;
-	if(turn_on)
-	{
-		htim3.Instance->CCR1 = (uint32_t)CLIP(SERVO_ROLL_CENTER + pid_roll_output,   SERVO_ROLL_MIN,  SERVO_ROLL_MAX);       /* Channel 1 serve roll  */
-		htim3.Instance->CCR2 = (uint32_t)CLIP(SERVO_PITCH_CENTER + pid_pitch_output, SERVO_PITCH_MIN, SERVO_PITCH_MAX);      /* Channel 2 serve pitch */
-		htim3.Instance->CCR3 = (uint32_t)CLIP(throttle_radio + pid_yaw_output, DUTY_CYCLE_MOTOR_MIN, DUTY_CYCLE_MOTOR_MAX);  /* Channel 3 motor CW    */
-		htim3.Instance->CCR4 = (uint32_t)CLIP(throttle_radio - pid_yaw_output, DUTY_CYCLE_MOTOR_MIN, DUTY_CYCLE_MOTOR_MAX);  /* Channel 4 motor CCW   */
-	}
-	else
-	{
-		htim3.Instance->CCR1 = (uint32_t)SERVO_PITCH_CENTER; 	/*  Channel 1 servo Pitch */
-		htim3.Instance->CCR2 = (uint32_t)SERVO_ROLL_CENTER;	    /*  Channel 2 servo Roll  */
-		htim3.Instance->CCR3 = (uint32_t)DUTY_CYCLE_TURNOFF;	/*  Channel 3 motor CW    */
-		htim3.Instance->CCR4 = (uint32_t)DUTY_CYCLE_TURNOFF;    /*  Channel 4 motor CCW   */
-	}
-
-	measure_time = HAL_GetTick() - loop_timer;
+	// PID controller
+	pid_roll_output  = updatePID(&pid_roll, setpoint_roll, gyro_roll, gx_2);
+	pid_pitch_output = updatePID(&pid_pitch, setpoint_pitch, gyro_pitch, gy_2);
+	pid_yaw_output   = updatePID(&pid_yaw, setpoint_yaw, yaw_w_offset, gz_2);
+	//measure_time = HAL_GetTick() - loop_timer;
 	while (HAL_GetTick() - loop_timer < sec2milliseconds(SAMPLE_TIME_S));
+	measure_time = HAL_GetTick() - loop_timer;
   }
   /* USER CODE END 3 */
 }
@@ -529,6 +503,40 @@ static void MX_I2C1_Init(void)
   /* USER CODE BEGIN I2C1_Init 2 */
 
   /* USER CODE END I2C1_Init 2 */
+
+}
+
+/**
+  * @brief I2C2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C2_Init(void)
+{
+
+  /* USER CODE BEGIN I2C2_Init 0 */
+
+  /* USER CODE END I2C2_Init 0 */
+
+  /* USER CODE BEGIN I2C2_Init 1 */
+
+  /* USER CODE END I2C2_Init 1 */
+  hi2c2.Instance = I2C2;
+  hi2c2.Init.ClockSpeed = 400000;
+  hi2c2.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c2.Init.OwnAddress1 = 0;
+  hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c2.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c2.Init.OwnAddress2 = 0;
+  hi2c2.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c2.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C2_Init 2 */
+
+  /* USER CODE END I2C2_Init 2 */
 
 }
 
@@ -725,10 +733,10 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : PB14 */
-  GPIO_InitStruct.Pin = GPIO_PIN_14;
+  /*Configure GPIO pins : PB13 PB14 PB15 */
+  GPIO_InitStruct.Pin = GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -739,129 +747,6 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
-{
-
-	if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1)  // if the interrupt source is channel1
-	{
-		if (is_first_captured_ch1==0) // if the first value is not captured
-		{
-			IC_Val1_ch1 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1); // read the first value
-			is_first_captured_ch1 = 1;  // set the first captured as true
-		}
-
-		else   // if the first is already captured
-		{
-			IC_Val2_ch1 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);  // read second value
-
-			if (IC_Val2_ch1 > IC_Val1_ch1)
-			{
-				difference_ch1 = IC_Val2_ch1-IC_Val1_ch1;
-			}
-
-			else if (IC_Val1_ch1 > IC_Val2_ch1)
-			{
-				difference_ch1 = IC_Val2_ch1 - (IC_Val1_ch1 - AUTORELOAD);
-			}
-
-			float refClock = TIMCLOCK/(PRESCALAR);
-			float mFactor = 1000000/refClock;
-
-			usWidth_ch1 = difference_ch1*mFactor;
-			is_first_captured_ch1 = 0; // set it back to false
-		}
-	}
-
-	if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2)  // if the interrupt source is channel1
-		{
-			if (is_first_captured_ch2==0) // if the first value is not captured
-			{
-				IC_Val1_ch2 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2); // read the first value
-				is_first_captured_ch2 = 1;  // set the first captured as true
-			}
-
-			else   // if the first is already captured
-			{
-				IC_Val2_ch2 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);  // read second value
-
-				if (IC_Val2_ch2 > IC_Val1_ch2)
-				{
-					difference_ch2 = IC_Val2_ch2-IC_Val1_ch2;
-				}
-
-				else if (IC_Val1_ch2 > IC_Val2_ch2)
-				{
-					difference_ch2 =  IC_Val2_ch2  - (IC_Val1_ch2 - AUTORELOAD);
-				}
-
-				float refClock = TIMCLOCK/(PRESCALAR);
-				float mFactor = 1000000/refClock;
-
-				usWidth_ch2 = difference_ch2*mFactor;
-				is_first_captured_ch2 = 0; // set it back to false
-			}
-		}
-
-	if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_3)  // if the interrupt source is channel1
-		{
-			if (is_first_captured_ch3 ==0) // if the first value is not captured
-			{
-				IC_Val1_ch3 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_3); // read the first value
-				is_first_captured_ch3 = 1;  // set the first captured as true
-			}
-
-			else   // if the first is already captured
-			{
-				IC_Val2_ch3 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_3);  // read second value
-
-				if (IC_Val2_ch3 > IC_Val1_ch3)
-				{
-					difference_ch3 = IC_Val2_ch3-IC_Val1_ch3;
-				}
-
-				else if (IC_Val1_ch3 > IC_Val2_ch3)
-				{
-					difference_ch3 =  IC_Val2_ch3  - (IC_Val1_ch3 - AUTORELOAD);
-				}
-
-				float refClock = TIMCLOCK/(PRESCALAR);
-				float mFactor = 1000000/refClock;
-
-				usWidth_ch3 = difference_ch3*mFactor;
-				is_first_captured_ch3 = 0; // set it back to false
-			}
-		}
-
-	if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_4)  // if the interrupt source is channel1
-	{
-		if (is_first_captured_ch4 ==0) // if the first value is not captured
-		{
-			IC_Val1_ch4 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_4); // read the first value
-			is_first_captured_ch4 = 1;  // set the first captured as true
-		}
-
-		else   // if the first is already captured
-		{
-			IC_Val2_ch4 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_4);  // read second value
-
-			if (IC_Val2_ch4 > IC_Val1_ch4)
-			{
-				difference_ch4 = IC_Val2_ch4-IC_Val1_ch4;
-			}
-
-			else if (IC_Val1_ch4 > IC_Val2_ch4)
-			{
-				difference_ch4 =  IC_Val2_ch4  - (IC_Val1_ch4 - AUTORELOAD);
-			}
-
-			float refClock = TIMCLOCK/(PRESCALAR);
-			float mFactor = 1000000/refClock;
-
-			usWidth_ch4 = difference_ch4*mFactor;
-			is_first_captured_ch4 = 0; // set it back to false
-		}
-	}
-}
 
 /* USER CODE END 4 */
 

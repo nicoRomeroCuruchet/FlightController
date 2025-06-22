@@ -12,7 +12,6 @@
  extern "C" {
 #endif
 //#########################################################################################################
-#include "main.h"
 #include "stm32f4xx_hal.h"
  //#########################################################################################################
 #define Standby 0
@@ -33,7 +32,7 @@ typedef struct QMC
 	float               compas;
 }QMC_t;
 //#########################################################################################################
-uint8_t QMC_init(QMC_t *qmc,I2C_HandleTypeDef *i2c,uint8_t Output_Data_Rate);
+int8_t QMC_init(QMC_t *qmc,I2C_HandleTypeDef *i2c,uint8_t Output_Data_Rate);
 uint8_t QMC_read(QMC_t *qmc);
 float   QMC_readHeading(QMC_t *qmc);
 uint8_t QMC_Standby(QMC_t *qmc);

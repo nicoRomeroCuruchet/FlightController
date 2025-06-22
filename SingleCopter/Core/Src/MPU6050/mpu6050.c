@@ -248,7 +248,7 @@ void MPU6050_setI2CBypassEnabled(uint8_t enabled) {
  *******************************************************************************/
 void MPU6050_initialize(void) {
   MPU6050_setClockSource(MPU6050_CLOCK_PLL_XGYRO); //设置时钟
-  MPU6050_setFullScaleGyroRange(MPU6050_GYRO_FS_2000); //陀螺仪最大量程 +-1000度每秒
+  MPU6050_setFullScaleGyroRange(MPU6050_GYRO_FS_500); // MPU6050_GYRO_FS_2000    陀螺仪最大量程 +-1000度每秒
   MPU6050_setFullScaleAccelRange(MPU6050_ACCEL_FS_2);	//加速度度最大量程 +-2G
   MPU6050_setSleepEnabled(0); //进入工作状态
   MPU6050_setI2CMasterModeEnabled(0);	 //不让MPU6050 控制AUXI2C
@@ -348,7 +348,7 @@ void Calubration_DMP(void)
 	  avg_gyro_y/=100;
 	  avg_gyro_z/=100;
 
-  } while(avg_gyro_x>5 || avg_gyro_y>5 || avg_gyro_z>5);
+  } while(abs(gyro[0])>1 || abs(gyro[1])>1 || abs(gyro[2])>1);
 }
 
 
@@ -357,7 +357,7 @@ void DMP_get_gyro_offsets(float* gx_offset, float* gy_offset, float* gz_offset)
 	  *gx_offset = 0.0;
 	  *gy_offset = 0.0;
 	  *gz_offset = 0.0;
-	  for(uint32_t i=0 ; i<100; i++)
+	  for(uint32_t i=0 ; i<2000; i++)
 	  {
 		  Read_DMP();
 		  *gx_offset = *gx_offset + (float)gyro[0];
@@ -365,9 +365,9 @@ void DMP_get_gyro_offsets(float* gx_offset, float* gy_offset, float* gz_offset)
 		  *gz_offset = *gz_offset + (float)gyro[2];
 	  }
 
-	  *gx_offset=*gx_offset/100;
-	  *gy_offset=*gy_offset/100;
-	  *gz_offset=*gz_offset/100;
+	  *gx_offset=*gx_offset/2000;
+	  *gy_offset=*gy_offset/2000;
+	  *gz_offset=*gz_offset/2000;
 
 	  return;
 }
@@ -399,6 +399,86 @@ int Read_Temperature(void) {
   return (int) Temp;
 }
 
+
+
+
+#define GYRO_ADDRESS_2 (0x69 << 1) // Shifted for HAL
+
+int8_t init_gyro_registers(void)
+{
+
+	HAL_StatusTypeDef status;
+    uint8_t reg, val;
+
+    // PWR_MGMT_1 = 0x00 (wake up)
+    uint8_t wakeup[] = {0x6B, 0x00};
+    status = HAL_I2C_Master_Transmit(&hi2c1, GYRO_ADDRESS_2, wakeup, 2, HAL_MAX_DELAY);
+    if (status != HAL_OK) return -1;
+
+   /* GYRO_CONFIG FS_SEL setting:
+      0 -> ±250 °/s  (131 LSB/°/s)
+      1 -> ±500 °/s   (65.5 LSB/°/s)
+      2 -> ±1000 °/s  (32.8 LSB/°/s)
+      3 -> ±2000 °/s  (16.4 LSB/°/s)
+      Sensitivity (LSB/°/s) decreases as full-scale range increases.
+      For best precision use FS_SEL = 0 (±250 °/s) if gyro rates are within that range. */
+
+    uint8_t gyro_cfg[] = {0x1B, 0x00};
+    status = HAL_I2C_Master_Transmit(&hi2c1, GYRO_ADDRESS_2, gyro_cfg, 2, HAL_MAX_DELAY);
+    if (status != HAL_OK) return -1;
+
+    // Read back GYRO_CONFIG register (0x1B) to verify it's 0x08
+    reg = 0x1B;
+    status = HAL_I2C_Master_Transmit(&hi2c1, GYRO_ADDRESS_2, &reg, 1, HAL_MAX_DELAY);
+    if (status != HAL_OK) return -1;
+    status = HAL_I2C_Master_Receive(&hi2c1, GYRO_ADDRESS_2, &val, 1, HAL_MAX_DELAY);
+    if (status != HAL_OK || val != gyro_cfg[1]) return -1;
+
+    // CONFIG = 0x01 (DLPF to ~188 Hz)
+    uint8_t config[] = {0x1A, 0x01};
+    status = HAL_I2C_Master_Transmit(&hi2c1, GYRO_ADDRESS_2, config, 2, HAL_MAX_DELAY);
+    if (status != HAL_OK) return -1;
+
+    return 0;
+}
+
+
+HAL_StatusTypeDef readBytes(uint8_t address, uint8_t subAddress, uint8_t count, uint8_t *dest)
+{
+    HAL_StatusTypeDef status;
+
+    // Step 1: Send the subAddress (register to start reading from)
+    status = HAL_I2C_Master_Transmit(&hi2c1, address, &subAddress, 1, HAL_MAX_DELAY);
+    if (status != HAL_OK)
+    {
+        // Handle or report transmission error
+        return HAL_ERROR;
+    }
+
+    // Step 2: Read 'count' bytes into destination buffer
+    status = HAL_I2C_Master_Receive(&hi2c1, address, dest, count, HAL_MAX_DELAY);
+    if (status != HAL_OK)
+    {
+        // Handle or report reception error
+        return HAL_ERROR;
+    }
+
+    return status;
+}
+
+int8_t read_gyro_only(int16_t *gyro_axis)
+{
+	  uint8_t rawData[6];  // x/y/z gyro register data stored here
+	  HAL_StatusTypeDef status;
+	  status = readBytes(GYRO_ADDRESS_2, 0x43, 6, &rawData[0]);  // Read the six raw data registers sequentially into data array
+	  if (status != HAL_OK) return -1;
+	  gyro_axis[0] = -(int16_t)(((int16_t)rawData[0] << 8) | rawData[1]) ;  // Turn the MSB and LSB into a signed 16-bit value
+	  gyro_axis[1] = -(int16_t)(((int16_t)rawData[2] << 8) | rawData[3]) ;
+	  gyro_axis[2] = -(int16_t)(((int16_t)rawData[4] << 8) | rawData[5]) ;
+	  return 0;
+
+	return 0;
+}
 
 
 

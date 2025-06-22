@@ -376,6 +376,8 @@ void DMP_get_gyro_offsets(float* gx_offset, float* gy_offset, float* gz_offset);
 void Calubration_DMP(void);
 void DMP_get_gravity(void);
 int Read_Temperature(void);
+int8_t init_gyro_registers(void);
+int8_t read_gyro_only(int16_t *gyro_axis);
 
 #ifdef __cplusplus
 }
