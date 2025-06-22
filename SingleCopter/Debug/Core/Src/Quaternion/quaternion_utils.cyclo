@@ -1,5 +1,0 @@
-../Core/Src/Quaternion/quaternion_utils.c:5:6:get_rotation_from_quaternion	1
-../Core/Src/Quaternion/quaternion_utils.c:20:6:get_rotation_from_euler_angles	1
-../Core/Src/Quaternion/quaternion_utils.c:49:7:get_omega_body_frame	1
-../Core/Src/Quaternion/quaternion_utils.c:70:6:get_rotation_error	3
-../Core/Src/Quaternion/quaternion_utils.c:91:6:get_omega_error	3
