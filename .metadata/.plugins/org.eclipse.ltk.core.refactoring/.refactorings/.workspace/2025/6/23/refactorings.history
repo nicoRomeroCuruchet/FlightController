@@ -1,3 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<session version="1.0">&#x0A;<refactoring comment="Delete resource &apos;SingleCopter/Core/Src/usart/usart&apos;" deleteContents="false" description="Delete resource &apos;SingleCopter/Core/Src/usart/usart&apos;" element1="/SingleCopter/Core/Src/usart/usart" flags="7" id="org.eclipse.ltk.core.refactoring.delete.resources" resources="1" stamp="1748813680287"/>&#x0A;<refactoring comment="Delete resource &apos;FlightController&apos;" deleteContents="true" description="Delete resource &apos;FlightController&apos;" element1="/FlightController" flags="7" id="org.eclipse.ltk.core.refactoring.delete.resources" resources="1" stamp="1748827031030"/>
-</session>

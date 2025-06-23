@@ -247,6 +247,8 @@ int main(void)
   // Turn off IMU
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_RESET);
+  // Configuration with the led up
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
 
   HAL_UART_Receive_IT(&huart2, rx_buffer, TRANSMITED_BYTES);
 
@@ -301,7 +303,7 @@ int main(void)
   // Wait 10s for calibration, don't move the IMU!
   HAL_Delay(10000);
   Calubration_DMP();
-  HAL_Delay(5000);
+  HAL_Delay(10000);
   DMP_get_gyro_offsets(&gx_offset, &gy_offset, &gz_offset);
   // Now set the gyro
   HAL_Delay(100);
@@ -337,6 +339,19 @@ int main(void)
 
   } while (pulse_ch2 > 1100);// throttle upper 1050 don't start
 
+  roll_w_offset=0;
+  pitch_w_offset=0;
+  for (int var = 0; var < 1000; ++var) {
+	  Read_DMP();
+	  roll_w_offset  += roll - roll_offset;
+	  pitch_w_offset += pitch - pitch_offset;
+  }
+  pitch_w_offset/=1000;
+  roll_w_offset /=1000;
+  if(fabs(roll_w_offset)>0.1 || fabs(pitch_w_offset)>0.1){
+	  HAL_NVIC_SystemReset();
+  }
+
   PIDController pid_roll, pid_pitch, pid_yaw;
   initializePID(&pid_roll, 1.0, 0.1, 0.0, SAMPLE_TIME_S,
                 PID_LIM_MIN_INT_ROLL, PID_LIM_MAX_INT_ROLL,
@@ -346,13 +361,17 @@ int main(void)
                 PID_LIM_MIN_INT_PITCH, PID_LIM_MAX_INT_PITCH,
                 PID_LIM_MIN_PITCH, PID_LIM_MAX_PITCH);
 
-  initializePID(&pid_yaw, 0.0, 1.0, 0.0, SAMPLE_TIME_S,
+  initializePID(&pid_yaw, 0.0, 0.25, 1.0, SAMPLE_TIME_S,
                 PID_LIM_MIN_INT_YAW, PID_LIM_MAX_INT_YAW,
                 PID_LIM_MIN_YAW, PID_LIM_MAX_YAW);
 
+  resetPID(&pid_pitch);
+  resetPID(&pid_roll);
+  resetPID(&pid_yaw);
+
   gyro_roll=gyro_pitch=gyro_yaw=0.0f;
   rate_roll=rate_pitch=rate_yaw=0.0f;
-
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
   while (1)
   {
     /* USER CODE END WHILE */
@@ -393,7 +412,7 @@ int main(void)
 	throttle_radio = pulse_ch2;
 	// yaw
 	setpoint_yaw   = RADIO_MIDDLE_FREQ - (float)pulse_ch1;
-	if (abs(setpoint_yaw)< RADIO_DEAD_BAND){
+	if (fabs(setpoint_yaw)< RADIO_DEAD_BAND){
 		setpoint_yaw=0.0;
 	}else{
 		float s =  (setpoint_yaw > 0) ? 1.0 : -1.0;
@@ -401,7 +420,7 @@ int main(void)
 	}
 	// roll
 	setpoint_roll  = RADIO_MIDDLE_FREQ - (float)pulse_ch4;
-	if (abs(setpoint_roll)< RADIO_DEAD_BAND){
+	if (fabs(setpoint_roll)< RADIO_DEAD_BAND){
 		setpoint_roll=0.0;
 	} else{
 		float s =  (setpoint_roll > 0) ? 1.0 : -1.0;
@@ -409,7 +428,7 @@ int main(void)
 	}
 	// pitch
 	setpoint_pitch = RADIO_MIDDLE_FREQ - (float)pulse_ch3;
-	if (abs(setpoint_pitch)< RADIO_DEAD_BAND){
+	if (fabs(setpoint_pitch)< RADIO_DEAD_BAND){
 		setpoint_pitch=0.0;
 	} else{
 		float s =  (setpoint_pitch > 0) ? 1.0 : -1.0;
@@ -418,7 +437,7 @@ int main(void)
 	// PID controller
 	pid_roll_output  = updatePID(&pid_roll, setpoint_roll, gyro_roll, gx_2);
 	pid_pitch_output = updatePID(&pid_pitch, setpoint_pitch, gyro_pitch, gy_2);
-	pid_yaw_output   = updatePID(&pid_yaw, setpoint_yaw, yaw_w_offset, gz_2);
+	pid_yaw_output   = updatePID(&pid_yaw, setpoint_yaw, gz_2, gz_2);
 	//measure_time = HAL_GetTick() - loop_timer;
 	while (HAL_GetTick() - loop_timer < sec2milliseconds(SAMPLE_TIME_S));
 	measure_time = HAL_GetTick() - loop_timer;
@@ -729,11 +748,22 @@ static void MX_GPIO_Init(void)
 /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : PC13 */
+  GPIO_InitStruct.Pin = GPIO_PIN_13;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PB13 PB14 PB15 */
   GPIO_InitStruct.Pin = GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15;

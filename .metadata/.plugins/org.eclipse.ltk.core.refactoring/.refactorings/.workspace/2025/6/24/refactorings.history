@@ -1,3 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<session version="1.0">&#x0A;<refactoring comment="Delete resource &apos;SingleCopter/Core/Src/HMC5883L/I2C2.c&apos;" deleteContents="false" description="Delete resource &apos;SingleCopter/Core/Src/HMC5883L/I2C2.c&apos;" element1="/SingleCopter/Core/Src/HMC5883L/I2C2.c" flags="7" id="org.eclipse.ltk.core.refactoring.delete.resources" resources="1" stamp="1749481391847"/>&#x0A;<refactoring comment="Delete resource &apos;SingleCopter/Core/Inc/HMC5883L/I2C2.h&apos;" deleteContents="false" description="Delete resource &apos;SingleCopter/Core/Inc/HMC5883L/I2C2.h&apos;" element1="/SingleCopter/Core/Inc/HMC5883L/I2C2.h" flags="7" id="org.eclipse.ltk.core.refactoring.delete.resources" resources="1" stamp="1749481395966"/>
-</session>
