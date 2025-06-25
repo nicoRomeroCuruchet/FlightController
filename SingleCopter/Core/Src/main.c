@@ -112,7 +112,6 @@ uint8_t rx_buffer[TRANSMITED_BYTES];
 float received_values[9]; // To store the result
 int pid_update_ready=0;
 
-float temperature, pressure, humidity, altitude;
 
 extern float q0, q1, q2, q3;
 extern float pitch, roll, yaw;
@@ -157,7 +156,11 @@ float throttle_radio = 0;
 BMP280_HandleTypedef bmp280;
 QMC_t qmc;
 
-float pressure, temperature, humidity;
+float temperature;
+float pressure, humidity;
+float pressure_hPa = 0.0f;
+float altitude = 0.0f; // Altitude in meters
+float altitude_offset = 0.0f;
 
 /* USER CODE END PV */
 
@@ -214,6 +217,41 @@ int main(void)
   MX_I2C2_Init();
   /* USER CODE BEGIN 2 */
 
+  bmp280_init_default_params(&bmp280.params);
+  bmp280.params.filter = BMP280_FILTER_2;  // Filter x16
+  bmp280.params.oversampling_pressure = BMP280_ULTRA_HIGH_RES; // Oversampling x16
+  bmp280.addr = BMP280_I2C_ADDRESS_0;
+  bmp280.i2c = &hi2c2;
+
+  while (!bmp280_init(&bmp280, &bmp280.params)) {
+	HAL_Delay(2000);
+  }
+
+  HAL_Delay(100);
+   // Initialize altitude offset
+  // foor loop to take some measurements to get the offset
+  for (int i = 0; i < 100; i++) {
+    //bmp280_read_fixed(&bmp280, &temperature, &pressure, &humidity);
+    bmp280_read_float(&bmp280, &temperature, &pressure, &humidity);
+
+    pressure_hPa = (float)pressure / 1.0f; // Convert to hPa
+    pressure_hPa /= 100;
+    altitude_offset += 44330 * (1.0 - pow(pressure_hPa / 1013.25, 0.1903));
+    HAL_Delay(10);
+  }
+  altitude_offset /= 100.0f; // Average altitude over 10 readings
+
+  while (1) {
+  loop_timer = HAL_GetTick();
+  // Read the BMP280 sensor
+	//bmp280_read_fixed(&bmp280, &temperature, &pressure, &humidity);
+  bmp280_read_float(&bmp280, &temperature, &pressure, &humidity);
+  pressure_hPa = (float)pressure / 1.0f; // Convert to hPa
+	pressure_hPa /= 100;
+	altitude = 44330 * (1.0 - pow(pressure_hPa / 1013.25, 0.1903)) - altitude_offset; // Calculate altitude
+  measure_time = HAL_GetTick() - loop_timer;
+  }
+	
   /*do{
 	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);
 	  HAL_Delay(100);
