@@ -329,10 +329,10 @@ int main(void)
   while (!bmp280_init(&bmp280, &bmp280.params) || ((QMC_init(&qmc, &hi2c2 ,200)== -1))) {
 	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);
-	HAL_Delay(2000);
+	HAL_Delay(4000);
 	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
 	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
-	HAL_Delay(2000);
+	HAL_Delay(4000);
   }
   HAL_Delay(100);
 
