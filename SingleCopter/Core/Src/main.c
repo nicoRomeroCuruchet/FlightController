@@ -35,7 +35,7 @@
 #define LSB_Sensitivity 131.0f // 65.5f	// Gyro degrees conversions
 #define ALPHA 1.0  				// Gyro low pass filter (1.0 no filter, raw data)
 #define GYRO_SING -1.0
-#define SAMPLE_TIME_S 0.001f 	// 1Khz!
+#define SAMPLE_TIME_S 0.002f 	// 1Khz!
 /* Controller parameters */
 /***********************************************************/
 /************************** ROLL **************************/
@@ -317,29 +317,6 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  do {
-
-	Read_DMP();
-	yaw_offset   = yaw;
-	roll_offset  = roll;
-	pitch_offset = pitch;
-	HAL_Delay(100);
-
-  } while (pulse_ch2 > 1100);// throttle upper 1050 don't start
-
-  roll_w_offset=0;
-  pitch_w_offset=0;
-  for (int var = 0; var < 1000; ++var) {
-	  Read_DMP();
-	  roll_w_offset  += roll - roll_offset;
-	  pitch_w_offset += pitch - pitch_offset;
-  }
-  pitch_w_offset/=1000;
-  roll_w_offset /=1000;
-  if(fabs(roll_w_offset)>0.1 || fabs(pitch_w_offset)>0.1){
-	  HAL_NVIC_SystemReset();
-  }
-
   bmp280_init_default_params(&bmp280.params);
   bmp280.params.filter = BMP280_FILTER_2;  // Filter x16
   bmp280.params.oversampling_pressure = BMP280_ULTRA_HIGH_RES; // Oversampling x16
@@ -350,7 +327,7 @@ int main(void)
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
   HAL_Delay(200);
   while (!bmp280_init(&bmp280, &bmp280.params) || ((QMC_init(&qmc, &hi2c2 ,200)== -1))) {
-	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);
 	HAL_Delay(2000);
 	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
@@ -359,29 +336,32 @@ int main(void)
   }
   HAL_Delay(100);
 
-  // Initialize altitude offset
- // foor loop to take some measurements to get the offset
- /*for (int i = 0; i < 100; i++) {
-   //bmp280_read_fixed(&bmp280, &temperature, &pressure, &humidity);
-   bmp280_read_float(&bmp280, &temperature, &pressure, &humidity);
+  do {
 
-   pressure_hPa = (float)pressure / 1.0f; // Convert to hPa
-   pressure_hPa /= 100;
-   altitude_offset += 44330 * (1.0 - pow(pressure_hPa / 1013.25, 0.1903));
-   HAL_Delay(10);
- }
- altitude_offset /= 100.0f; // Average altitude over 10 readings
-
- while (1) {
-	loop_timer = HAL_GetTick();
-	// Read the BMP280 sensor
-	bmp280_read_float(&bmp280, &temperature, &pressure, &humidity);
+	Read_DMP();
 	QMC_read(&qmc);
-	pressure_hPa = (float)pressure / 1.0f; // Convert to hPa
-	pressure_hPa /= 100;
-	altitude = 44330 * (1.0 - pow(pressure_hPa / 1013.25, 0.1903)) - altitude_offset; // Calculate altitude
-	measure_time = HAL_GetTick() - loop_timer;
- }*/
+	yaw_offset   =  qmc.heading;
+	roll_offset  = roll;
+	pitch_offset = pitch;
+	HAL_Delay(100);
+
+  } while (pulse_ch2 > 1100);// throttle upper 1050 don't start
+
+  roll_w_offset=0;
+  pitch_w_offset=0;
+  for (int var = 0; var < 1000; ++var) {
+	  Read_DMP();
+	  QMC_read(&qmc);
+	  yaw_w_offset +=  qmc.heading - yaw_offset;
+	  roll_w_offset  += roll - roll_offset;
+	  pitch_w_offset += pitch - pitch_offset;
+  }
+  pitch_w_offset/=1000;
+  roll_w_offset /=1000;
+  yaw_w_offset /=1000;
+  if(fabs(roll_w_offset)>0.1 || fabs(pitch_w_offset)>0.1){
+	  HAL_NVIC_SystemReset();
+  }
 
   PIDController pid_roll, pid_pitch, pid_yaw;
   initializePID(&pid_roll, 1.0, 0.1, 0.0, SAMPLE_TIME_S,
@@ -402,8 +382,6 @@ int main(void)
 
   gyro_roll=gyro_pitch=gyro_yaw=0.0f;
   rate_roll=rate_pitch=rate_yaw=0.0f;
-  QMC_read(&qmc);
-  yaw_offset = qmc.heading;
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
   while (1)
   {
@@ -431,7 +409,7 @@ int main(void)
 
 	gyro_pitch = gyro_pitch*0.996 + pitch_w_offset*0.004;
 	gyro_roll = gyro_roll*0.996 + roll_w_offset*0.004;
-	gyro_yaw = gyro_yaw*0.996 + yaw_w_offset*0.004;
+	gyro_yaw = gyro_yaw*0.96 + yaw_w_offset*0.04;
 
 	// get angle rates degrees / seconds with an exponential filter
 	/*rate_roll  = GYRO_SING*((1-ALPHA)*rate_roll  + ALPHA*((((float)gyro[0]) - gx_offset) / LSB_Sensitivity));
