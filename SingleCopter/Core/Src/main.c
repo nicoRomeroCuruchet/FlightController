@@ -217,61 +217,6 @@ int main(void)
   MX_I2C2_Init();
   /* USER CODE BEGIN 2 */
 
-  bmp280_init_default_params(&bmp280.params);
-  bmp280.params.filter = BMP280_FILTER_2;  // Filter x16
-  bmp280.params.oversampling_pressure = BMP280_ULTRA_HIGH_RES; // Oversampling x16
-  bmp280.addr = BMP280_I2C_ADDRESS_0;
-  bmp280.i2c = &hi2c2;
-
-  while (!bmp280_init(&bmp280, &bmp280.params)) {
-	HAL_Delay(2000);
-  }
-
-  HAL_Delay(100);
-   // Initialize altitude offset
-  // foor loop to take some measurements to get the offset
-  for (int i = 0; i < 100; i++) {
-    //bmp280_read_fixed(&bmp280, &temperature, &pressure, &humidity);
-    bmp280_read_float(&bmp280, &temperature, &pressure, &humidity);
-
-    pressure_hPa = (float)pressure / 1.0f; // Convert to hPa
-    pressure_hPa /= 100;
-    altitude_offset += 44330 * (1.0 - pow(pressure_hPa / 1013.25, 0.1903));
-    HAL_Delay(10);
-  }
-  altitude_offset /= 100.0f; // Average altitude over 10 readings
-
-  while (1) {
-  loop_timer = HAL_GetTick();
-  // Read the BMP280 sensor
-	//bmp280_read_fixed(&bmp280, &temperature, &pressure, &humidity);
-  bmp280_read_float(&bmp280, &temperature, &pressure, &humidity);
-  pressure_hPa = (float)pressure / 1.0f; // Convert to hPa
-	pressure_hPa /= 100;
-	altitude = 44330 * (1.0 - pow(pressure_hPa / 1013.25, 0.1903)) - altitude_offset; // Calculate altitude
-  measure_time = HAL_GetTick() - loop_timer;
-  }
-	
-  /*do{
-	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);
-	  HAL_Delay(100);
-	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
-	  bmp280_init_default_params(&bmp280.params);
-	  bmp280.addr = BMP280_I2C_ADDRESS_0;
-	  bmp280.i2c = &hi2c2;
-  }
-  while((QMC_init(&qmc, &hi2c2 ,200)==-1) || !bmp280_init(&bmp280, &bmp280.params)) ;
-
-
-
-  while(1){
-
-	  loop_timer = HAL_GetTick();
-	  bmp280_read_float(&bmp280, &temperature,&pressure, &humidity);
-	  QMC_read(&qmc);
-	  measure_time = HAL_GetTick() - loop_timer;
-  }*/
-
   /*Initialize turn off motors */
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);  			/* Motor 1 */
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);  			/* Motor 2 */
@@ -282,6 +227,10 @@ int main(void)
   htim3.Instance->CCR2 = (uint32_t)MOTOR_TURN_OFF;      /*  Channel 2 Motor 2 */
   htim3.Instance->CCR3 = (uint32_t)MOTOR_TURN_OFF;      /*  Channel 3 Motor 3 */
   htim3.Instance->CCR4 = (uint32_t)MOTOR_TURN_OFF;      /*  Channel 4 Motor 4 */
+  // turn off magnetometer
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET);
+  // turn off barometer
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);
   // Turn off IMU
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_RESET);
@@ -363,6 +312,7 @@ int main(void)
   gx_2_offset /=2000.0f;
   gy_2_offset /=2000.0f;
   gz_2_offset /=2000.0f;
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -390,6 +340,49 @@ int main(void)
 	  HAL_NVIC_SystemReset();
   }
 
+  bmp280_init_default_params(&bmp280.params);
+  bmp280.params.filter = BMP280_FILTER_2;  // Filter x16
+  bmp280.params.oversampling_pressure = BMP280_ULTRA_HIGH_RES; // Oversampling x16
+  bmp280.addr = BMP280_I2C_ADDRESS_0;
+  bmp280.i2c = &hi2c2;
+
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
+  HAL_Delay(200);
+  while (!bmp280_init(&bmp280, &bmp280.params) || ((QMC_init(&qmc, &hi2c2 ,200)== -1))) {
+	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);
+	HAL_Delay(2000);
+	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
+	HAL_Delay(2000);
+  }
+  HAL_Delay(100);
+
+  // Initialize altitude offset
+ // foor loop to take some measurements to get the offset
+ /*for (int i = 0; i < 100; i++) {
+   //bmp280_read_fixed(&bmp280, &temperature, &pressure, &humidity);
+   bmp280_read_float(&bmp280, &temperature, &pressure, &humidity);
+
+   pressure_hPa = (float)pressure / 1.0f; // Convert to hPa
+   pressure_hPa /= 100;
+   altitude_offset += 44330 * (1.0 - pow(pressure_hPa / 1013.25, 0.1903));
+   HAL_Delay(10);
+ }
+ altitude_offset /= 100.0f; // Average altitude over 10 readings
+
+ while (1) {
+	loop_timer = HAL_GetTick();
+	// Read the BMP280 sensor
+	bmp280_read_float(&bmp280, &temperature, &pressure, &humidity);
+	QMC_read(&qmc);
+	pressure_hPa = (float)pressure / 1.0f; // Convert to hPa
+	pressure_hPa /= 100;
+	altitude = 44330 * (1.0 - pow(pressure_hPa / 1013.25, 0.1903)) - altitude_offset; // Calculate altitude
+	measure_time = HAL_GetTick() - loop_timer;
+ }*/
+
   PIDController pid_roll, pid_pitch, pid_yaw;
   initializePID(&pid_roll, 1.0, 0.1, 0.0, SAMPLE_TIME_S,
                 PID_LIM_MIN_INT_ROLL, PID_LIM_MAX_INT_ROLL,
@@ -409,6 +402,8 @@ int main(void)
 
   gyro_roll=gyro_pitch=gyro_yaw=0.0f;
   rate_roll=rate_pitch=rate_yaw=0.0f;
+  QMC_read(&qmc);
+  yaw_offset = qmc.heading;
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
   while (1)
   {
@@ -416,8 +411,9 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 	loop_timer = HAL_GetTick();
+	QMC_read(&qmc);
 	Read_DMP();
-	yaw_w_offset   = yaw - yaw_offset;  // TODO too much drift...
+	yaw_w_offset   = qmc.heading - yaw_offset;  // TODO too much drift...
 	roll_w_offset  = roll - roll_offset;
 	pitch_w_offset = pitch - pitch_offset;
 
@@ -428,13 +424,15 @@ int main(void)
 
 	gyro_roll += gx_2*SAMPLE_TIME_S;
 	gyro_pitch += gy_2*SAMPLE_TIME_S;
+	gyro_yaw += gz_2*SAMPLE_TIME_S;
 	
 	gyro_roll  += gyro_pitch * sin(deg2rad(gz_2) * SAMPLE_TIME_S);
 	gyro_pitch -= gyro_roll * sin(deg2rad(gz_2) * SAMPLE_TIME_S);
 
 	gyro_pitch = gyro_pitch*0.996 + pitch_w_offset*0.004;
 	gyro_roll = gyro_roll*0.996 + roll_w_offset*0.004;
-  
+	gyro_yaw = gyro_yaw*0.996 + yaw_w_offset*0.004;
+
 	// get angle rates degrees / seconds with an exponential filter
 	/*rate_roll  = GYRO_SING*((1-ALPHA)*rate_roll  + ALPHA*((((float)gyro[0]) - gx_offset) / LSB_Sensitivity));
 	rate_pitch = GYRO_SING*((1-ALPHA)*rate_pitch + ALPHA*((((float)gyro[1]) - gy_offset) / LSB_Sensitivity));
@@ -794,7 +792,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : PC13 */
   GPIO_InitStruct.Pin = GPIO_PIN_13;
@@ -803,8 +801,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PB13 PB14 PB15 */
-  GPIO_InitStruct.Pin = GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15;
+  /*Configure GPIO pins : PB12 PB13 PB14 PB15 */
+  GPIO_InitStruct.Pin = GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
