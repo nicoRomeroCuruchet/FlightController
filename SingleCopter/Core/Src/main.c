@@ -35,7 +35,7 @@
 #define LSB_Sensitivity 131.0f // 65.5f	// Gyro degrees conversions
 #define ALPHA 1.0  				// Gyro low pass filter (1.0 no filter, raw data)
 #define GYRO_SING -1.0
-#define SAMPLE_TIME_S 0.002f 	// 1Khz!
+#define SAMPLE_TIME_S 0.001f 	// 1Khz!
 /* Controller parameters */
 /***********************************************************/
 /************************** ROLL **************************/
@@ -79,6 +79,8 @@
 #define MOTOR_MAX_SPEED 2000
 #define MOTOR_MIN_SPEED 1100
 
+
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -93,7 +95,7 @@
 #define deg2rad(degrees) degrees * M_PI / 180.0
 #define rad2deg(radians) radians * 180.0 / M_PI
 
-#define TRANSMITED_BYTES 9*4
+#define TRANSMITED_BYTES 10*4
 
 /* USER CODE END PM */
 
@@ -109,7 +111,7 @@ UART_HandleTypeDef huart2;
 /* USER CODE BEGIN PV */
 
 uint8_t rx_buffer[TRANSMITED_BYTES];
-float received_values[9]; // To store the result
+float received_values[10]; // To store the result
 int pid_update_ready=0;
 
 
@@ -136,6 +138,7 @@ extern volatile uint32_t pulse_ch2;
 extern volatile uint32_t pulse_ch3;
 extern volatile uint32_t pulse_ch4;
 
+PIDController pid_roll, pid_pitch, pid_yaw;
 
 float setpoint_roll   = 0;
 float setpoint_pitch  = 0;
@@ -151,7 +154,11 @@ float rate_pitch = 0;
 float rate_yaw = 0;
 
 float throttle_radio = 0;
-
+uint8_t start=0;
+float motor_1;
+float motor_2;
+float motor_3;
+float motor_4;
 
 BMP280_HandleTypedef bmp280;
 QMC_t qmc;
@@ -235,7 +242,14 @@ int main(void)
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_RESET);
   // Configuration with the led up
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_RESET);
+
+  //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+  //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_SET);
+  //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_SET);
+
 
   HAL_UART_Receive_IT(&huart2, rx_buffer, TRANSMITED_BYTES);
 
@@ -323,17 +337,27 @@ int main(void)
   bmp280.addr = BMP280_I2C_ADDRESS_0;
   bmp280.i2c = &hi2c2;
 
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
+
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
   HAL_Delay(200);
-  while (!bmp280_init(&bmp280, &bmp280.params) || ((QMC_init(&qmc, &hi2c2 ,200)== -1))) {
-	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET);
+
+  while (!bmp280_init(&bmp280, &bmp280.params)) {
 	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);
-	HAL_Delay(4000);
-	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
+	HAL_Delay(500);
 	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
-	HAL_Delay(4000);
+	HAL_Delay(500);
   }
+
+
+  HAL_Delay(200);
+  while ((QMC_init(&qmc, &hi2c2 ,200)== -1)) {
+	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET);
+	HAL_Delay(500);
+	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
+	HAL_Delay(500);
+  }
+
   HAL_Delay(100);
 
   do {
@@ -363,16 +387,16 @@ int main(void)
 	  HAL_NVIC_SystemReset();
   }
 
-  PIDController pid_roll, pid_pitch, pid_yaw;
-  initializePID(&pid_roll, 1.0, 0.1, 0.0, SAMPLE_TIME_S,
+
+  initializePID(&pid_roll, 10.0, 0.0, 0.0, SAMPLE_TIME_S,
                 PID_LIM_MIN_INT_ROLL, PID_LIM_MAX_INT_ROLL,
                 PID_LIM_MIN_ROLL, PID_LIM_MAX_ROLL);
 
-  initializePID(&pid_pitch, 1.0, 0.5, 0.15, SAMPLE_TIME_S,
+  initializePID(&pid_pitch, 10.0, 0.0, 0.0, SAMPLE_TIME_S,
                 PID_LIM_MIN_INT_PITCH, PID_LIM_MAX_INT_PITCH,
                 PID_LIM_MIN_PITCH, PID_LIM_MAX_PITCH);
 
-  initializePID(&pid_yaw, 0.0, 0.25, 1.0, SAMPLE_TIME_S,
+  initializePID(&pid_yaw, 0.0, 0.0, 10.0, SAMPLE_TIME_S,
                 PID_LIM_MIN_INT_YAW, PID_LIM_MAX_INT_YAW,
                 PID_LIM_MIN_YAW, PID_LIM_MAX_YAW);
 
@@ -382,7 +406,8 @@ int main(void)
 
   gyro_roll=gyro_pitch=gyro_yaw=0.0f;
   rate_roll=rate_pitch=rate_yaw=0.0f;
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+  start = 0;
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
   while (1)
   {
     /* USER CODE END WHILE */
@@ -400,16 +425,16 @@ int main(void)
 	gy_2 = ((float)gyro_axis[1] - gy_2_offset)  / LSB_Sensitivity;
 	gz_2 = ((float)gyro_axis[2] - gz_2_offset)  / LSB_Sensitivity;
 
-	gyro_roll += gx_2*SAMPLE_TIME_S;
+	gyro_roll  += gx_2*SAMPLE_TIME_S;
 	gyro_pitch += gy_2*SAMPLE_TIME_S;
-	gyro_yaw += gz_2*SAMPLE_TIME_S;
+	gyro_yaw   += gz_2*SAMPLE_TIME_S;
 	
 	gyro_roll  += gyro_pitch * sin(deg2rad(gz_2) * SAMPLE_TIME_S);
 	gyro_pitch -= gyro_roll * sin(deg2rad(gz_2) * SAMPLE_TIME_S);
 
 	gyro_pitch = gyro_pitch*0.996 + pitch_w_offset*0.004;
 	gyro_roll = gyro_roll*0.996 + roll_w_offset*0.004;
-	gyro_yaw = gyro_yaw*0.96 + yaw_w_offset*0.04;
+	//gyro_yaw = gyro_yaw*0.96 + yaw_w_offset*0.04;
 
 	// get angle rates degrees / seconds with an exponential filter
 	/*rate_roll  = GYRO_SING*((1-ALPHA)*rate_roll  + ALPHA*((((float)gyro[0]) - gx_offset) / LSB_Sensitivity));
@@ -448,10 +473,35 @@ int main(void)
 		float s =  (setpoint_pitch > 0) ? 1.0 : -1.0;
 		setpoint_pitch = MAP(setpoint_pitch - s*RADIO_DEAD_BAND, -500.0, +500.0,+20.0,-20.0);
 	}
-	// PID controller
-	pid_roll_output  = updatePID(&pid_roll, setpoint_roll, gyro_roll, gx_2);
-	pid_pitch_output = updatePID(&pid_pitch, setpoint_pitch, gyro_pitch, gy_2);
-	pid_yaw_output   = updatePID(&pid_yaw, setpoint_yaw, gz_2, gz_2);
+
+	if (start == 0)
+	{
+		// PID controller
+		pid_roll_output  = updatePID(&pid_roll, setpoint_roll, gyro_roll, gx_2);
+		pid_pitch_output = updatePID(&pid_pitch, setpoint_pitch, gyro_pitch, gy_2);
+		pid_yaw_output   = updatePID(&pid_yaw, setpoint_yaw, gz_2, gz_2);
+
+		motor_1 = throttle_radio - pid_roll_output - pid_pitch_output + CCW*pid_yaw_output;  // CCW
+		motor_2 = throttle_radio + pid_roll_output - pid_pitch_output + CW*pid_yaw_output;  // CW
+		motor_3 = throttle_radio + pid_roll_output + pid_pitch_output + CCW*pid_yaw_output;  // CCW
+		motor_4 = throttle_radio - pid_roll_output + pid_pitch_output + CW*pid_yaw_output;  // CW
+
+		htim3.Instance->CCR1 = (uint32_t)motor_1; /*  Channel 1 Motor 1 */
+		htim3.Instance->CCR2 = (uint32_t)motor_2; /*  Channel 2 Motor 2 */
+	    htim3.Instance->CCR3 = (uint32_t)motor_3; /*  Channel 3 Motor 3 */
+	    htim3.Instance->CCR4 = (uint32_t)motor_4; /*  Channel 4 Motor 4 */
+
+	}
+	else{
+
+		resetPID(&pid_roll);
+		resetPID(&pid_pitch);
+		resetPID(&pid_yaw);
+
+	}
+
+
+
 	//measure_time = HAL_GetTick() - loop_timer;
 	while (HAL_GetTick() - loop_timer < sec2milliseconds(SAMPLE_TIME_S));
 	measure_time = HAL_GetTick() - loop_timer;
@@ -767,13 +817,13 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : PC13 */
-  GPIO_InitStruct.Pin = GPIO_PIN_13;
+  /*Configure GPIO pins : PC13 PC14 PC15 */
+  GPIO_InitStruct.Pin = GPIO_PIN_13|GPIO_PIN_14|GPIO_PIN_15;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;

@@ -474,7 +474,7 @@ int8_t read_gyro_only(int16_t *gyro_axis)
 	  if (status != HAL_OK) return -1;
 	  gyro_axis[0] = -(int16_t)(((int16_t)rawData[0] << 8) | rawData[1]) ;  // Turn the MSB and LSB into a signed 16-bit value
 	  gyro_axis[1] = -(int16_t)(((int16_t)rawData[2] << 8) | rawData[3]) ;
-	  gyro_axis[2] = -(int16_t)(((int16_t)rawData[4] << 8) | rawData[5]) ;
+	  gyro_axis[2] = (int16_t)(((int16_t)rawData[4] << 8) | rawData[5]) ;
 	  return 0;
 
 	return 0;
