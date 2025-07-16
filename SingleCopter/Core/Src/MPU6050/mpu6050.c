@@ -295,13 +295,14 @@ void DMP_Init(void) {
  返回  值：无
  作    者：平衡小车之家
  **************************************************************************/
-void Read_DMP(void)
+int Read_DMP(void)
 {
   unsigned long sensor_timestamp;
   unsigned char more;
   long quat[4];
+  int read_dmp = -1;
 
-  dmp_read_fifo(gyro, accel, quat, &sensor_timestamp, &sensors, &more);
+  read_dmp = dmp_read_fifo(gyro, accel, quat, &sensor_timestamp, &sensors, &more);
 
   if (sensors & INV_WXYZ_QUAT)
   {
@@ -323,6 +324,8 @@ void Read_DMP(void)
     pitch = rad2deg(theta);
     yaw   = rad2deg(psi);
   }
+
+  return read_dmp;
 }
 
 /**************************************************************************
@@ -357,17 +360,22 @@ void DMP_get_gyro_offsets(float* gx_offset, float* gy_offset, float* gz_offset)
 	  *gx_offset = 0.0;
 	  *gy_offset = 0.0;
 	  *gz_offset = 0.0;
-	  for(uint32_t i=0 ; i<2000; i++)
+	  int var = 0;
+	  while(var<2000)
 	  {
-		  Read_DMP();
-		  *gx_offset = *gx_offset + (float)gyro[0];
-		  *gy_offset = *gy_offset + (float)gyro[1];
-		  *gz_offset = *gz_offset + (float)gyro[2];
+		  if(!Read_DMP())
+		  {
+			  *gx_offset = *gx_offset + (float)gyro[0];
+			  *gy_offset = *gy_offset + (float)gyro[1];
+			  *gz_offset = *gz_offset + (float)gyro[2];
+			  var++;
+		  }
+
 	  }
 
-	  *gx_offset=*gx_offset/2000;
-	  *gy_offset=*gy_offset/2000;
-	  *gz_offset=*gz_offset/2000;
+	  *gx_offset=*gx_offset/var;
+	  *gy_offset=*gy_offset/var;
+	  *gz_offset=*gz_offset/var;
 
 	  return;
 }
@@ -474,7 +482,7 @@ int8_t read_gyro_only(int16_t *gyro_axis)
 	  if (status != HAL_OK) return -1;
 	  gyro_axis[0] = -(int16_t)(((int16_t)rawData[0] << 8) | rawData[1]) ;  // Turn the MSB and LSB into a signed 16-bit value
 	  gyro_axis[1] = -(int16_t)(((int16_t)rawData[2] << 8) | rawData[3]) ;
-	  gyro_axis[2] = (int16_t)(((int16_t)rawData[4] << 8) | rawData[5]) ;
+	  gyro_axis[2] = (int16_t)(((int16_t)rawData[4] << 8)  | rawData[5]) ;
 	  return 0;
 
 	return 0;

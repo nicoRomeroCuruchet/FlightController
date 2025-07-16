@@ -86,7 +86,7 @@
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
 #define RADIO_MIDDLE_FREQ 1500.0f
-#define RADIO_DEAD_BAND 20.0f
+#define RADIO_DEAD_BAND 1.0f
 
 #define MAP(input, in_min, in_max, out_min, out_max) \
     (((input) - (in_min)) * ((out_max) - (out_min)) / ((in_max) - (in_min)) + (out_min))
@@ -126,7 +126,7 @@ uint32_t loop_timer;
 float yaw_offset, roll_offset, pitch_offset;
 float yaw_w_offset, roll_w_offset, pitch_w_offset;
 float gx_offset, gy_offset, gz_offset;
-
+int read_dmp = -1;
 
 int16_t gyro_axis[3];
 float gx_2, gy_2, gz_2;
@@ -246,11 +246,6 @@ int main(void)
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_RESET);
 
-  //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
-  //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_SET);
-  //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_SET);
-
-
   HAL_UART_Receive_IT(&huart2, rx_buffer, TRANSMITED_BYTES);
 
   if (HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_1) != HAL_OK) // Throttle ---> radio ch1
@@ -301,11 +296,23 @@ int main(void)
   } while(MPU6050_getDeviceID() != 0x68);
 
   DMP_Init();
-  // Wait 10s for calibration, don't move the IMU!
-  HAL_Delay(10000);
+  HAL_Delay(10000); // Wait 10s for calibration, don't move the IMU!
   Calubration_DMP();
   HAL_Delay(10000);
-  DMP_get_gyro_offsets(&gx_offset, &gy_offset, &gz_offset);
+
+  yaw_offset=roll_offset=pitch_offset=0;
+  int var = 0;
+  while(var < 2000) {
+    read_dmp = Read_DMP();
+  	if (read_dmp == 0){
+	  roll_offset  += roll;
+	  pitch_offset += pitch;
+	  var++;
+  	}
+  }
+  roll_offset  /=var;
+  pitch_offset /=var;
+  yaw_offset   /=var;
   // Now set the gyro
   HAL_Delay(100);
   do{
@@ -327,8 +334,28 @@ int main(void)
   gy_2_offset /=2000.0f;
   gz_2_offset /=2000.0f;
 
-  /* USER CODE END 2 */
+  roll_w_offset=0;
+  pitch_w_offset=0;
 
+  var = 0;
+  while(var < 2000) {
+	  QMC_read(&qmc);
+	  read_dmp = Read_DMP();
+	  yaw_w_offset +=  qmc.heading - yaw_offset;
+	  if (read_dmp == 0){
+		  roll_w_offset  += roll - roll_offset;
+		  pitch_w_offset += pitch - pitch_offset;
+		  var++;
+	  }
+  }
+  roll_w_offset  /=var;
+  pitch_w_offset /=var;
+  yaw_w_offset   /=var;
+
+  if(fabs(roll_w_offset)>0.1 || fabs(pitch_w_offset)>0.1){
+	  HAL_NVIC_SystemReset();
+  }
+  /* USER CODE END 2 */
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   bmp280_init_default_params(&bmp280.params);
@@ -336,7 +363,6 @@ int main(void)
   bmp280.params.oversampling_pressure = BMP280_ULTRA_HIGH_RES; // Oversampling x16
   bmp280.addr = BMP280_I2C_ADDRESS_0;
   bmp280.i2c = &hi2c2;
-
 
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
@@ -349,7 +375,6 @@ int main(void)
 	HAL_Delay(500);
   }
 
-
   HAL_Delay(200);
   while ((QMC_init(&qmc, &hi2c2 ,200)== -1)) {
 	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET);
@@ -358,41 +383,13 @@ int main(void)
 	HAL_Delay(500);
   }
 
-  HAL_Delay(100);
+  HAL_Delay(200);
 
-  do {
-
-	Read_DMP();
-	QMC_read(&qmc);
-	yaw_offset   =  qmc.heading;
-	roll_offset  = roll;
-	pitch_offset = pitch;
-	HAL_Delay(100);
-
-  } while (pulse_ch2 > 1100);// throttle upper 1050 don't start
-
-  roll_w_offset=0;
-  pitch_w_offset=0;
-  for (int var = 0; var < 1000; ++var) {
-	  Read_DMP();
-	  QMC_read(&qmc);
-	  yaw_w_offset +=  qmc.heading - yaw_offset;
-	  roll_w_offset  += roll - roll_offset;
-	  pitch_w_offset += pitch - pitch_offset;
-  }
-  pitch_w_offset/=1000;
-  roll_w_offset /=1000;
-  yaw_w_offset /=1000;
-  if(fabs(roll_w_offset)>0.1 || fabs(pitch_w_offset)>0.1){
-	  HAL_NVIC_SystemReset();
-  }
-
-
-  initializePID(&pid_roll, 10.0, 0.0, 0.0, SAMPLE_TIME_S,
+  initializePID(&pid_roll, 5.0, 0.0, 0.0, SAMPLE_TIME_S,
                 PID_LIM_MIN_INT_ROLL, PID_LIM_MAX_INT_ROLL,
                 PID_LIM_MIN_ROLL, PID_LIM_MAX_ROLL);
 
-  initializePID(&pid_pitch, 10.0, 0.0, 0.0, SAMPLE_TIME_S,
+  initializePID(&pid_pitch, 5.0, 0.0, 0.0, SAMPLE_TIME_S,
                 PID_LIM_MIN_INT_PITCH, PID_LIM_MAX_INT_PITCH,
                 PID_LIM_MIN_PITCH, PID_LIM_MAX_PITCH);
 
@@ -404,6 +401,15 @@ int main(void)
   resetPID(&pid_roll);
   resetPID(&pid_yaw);
 
+
+  do {
+
+	Read_DMP();  /**/
+	QMC_read(&qmc);
+	HAL_Delay(200);
+
+  } while (pulse_ch2 > 1100);// throttle upper 1100 don't start
+
   gyro_roll=gyro_pitch=gyro_yaw=0.0f;
   rate_roll=rate_pitch=rate_yaw=0.0f;
   start = 0;
@@ -411,7 +417,6 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-
     /* USER CODE BEGIN 3 */
 	loop_timer = HAL_GetTick();
 	QMC_read(&qmc);
@@ -432,20 +437,11 @@ int main(void)
 	gyro_roll  += gyro_pitch * sin(deg2rad(gz_2) * SAMPLE_TIME_S);
 	gyro_pitch -= gyro_roll * sin(deg2rad(gz_2) * SAMPLE_TIME_S);
 
-	gyro_pitch = gyro_pitch*0.996 + pitch_w_offset*0.004;
-	gyro_roll = gyro_roll*0.996 + roll_w_offset*0.004;
-	//gyro_yaw = gyro_yaw*0.96 + yaw_w_offset*0.04;
-
-	// get angle rates degrees / seconds with an exponential filter
-	/*rate_roll  = GYRO_SING*((1-ALPHA)*rate_roll  + ALPHA*((((float)gyro[0]) - gx_offset) / LSB_Sensitivity));
-	rate_pitch = GYRO_SING*((1-ALPHA)*rate_pitch + ALPHA*((((float)gyro[1]) - gy_offset) / LSB_Sensitivity));
-	rate_yaw   = GYRO_SING*((1-ALPHA)*rate_yaw   + ALPHA*((((float)gyro[2]) - gz_offset) / LSB_Sensitivity));
-
-	//TODO only for debug:
-	gyro_roll  +=rate_roll*0.003;//SAMPLE_TIME_S;
-	gyro_roll = gyro_roll*0.996 + roll_w_offset*0.004;
-	gyro_pitch +=rate_pitch*SAMPLE_TIME_S;
-	gyro_pitch = gyro_pitch*0.996 + pitch_w_offset*0.004;*/
+	if (read_dmp==0){
+		gyro_pitch = gyro_pitch*0.996 + pitch_w_offset*0.004;
+		gyro_roll = gyro_roll*0.996 + roll_w_offset*0.004;
+		//gyro_yaw = gyro_yaw*0.96 + yaw_w_offset*0.04;
+	}
 
 	//radio set-points
 	throttle_radio = pulse_ch2;
@@ -455,7 +451,7 @@ int main(void)
 		setpoint_yaw=0.0;
 	}else{
 		float s =  (setpoint_yaw > 0) ? 1.0 : -1.0;
-		setpoint_yaw = MAP(setpoint_yaw - s*RADIO_DEAD_BAND, -500.0, +500.0,-20.0,20.0);
+		setpoint_yaw = MAP(setpoint_yaw - s*RADIO_DEAD_BAND, -500.0, +500.0,-60.0,60.0); // yaw 60
 	}
 	// roll
 	setpoint_roll  = RADIO_MIDDLE_FREQ - (float)pulse_ch4;
@@ -463,7 +459,7 @@ int main(void)
 		setpoint_roll=0.0;
 	} else{
 		float s =  (setpoint_roll > 0) ? 1.0 : -1.0;
-		setpoint_roll = MAP(setpoint_roll - s*RADIO_DEAD_BAND, -500.0, +500.0,-20.0,20.0);
+		setpoint_roll = MAP(setpoint_roll - s*RADIO_DEAD_BAND, -500.0, +500.0,-25.0,25.0);
 	}
 	// pitch
 	setpoint_pitch = RADIO_MIDDLE_FREQ - (float)pulse_ch3;
@@ -471,7 +467,7 @@ int main(void)
 		setpoint_pitch=0.0;
 	} else{
 		float s =  (setpoint_pitch > 0) ? 1.0 : -1.0;
-		setpoint_pitch = MAP(setpoint_pitch - s*RADIO_DEAD_BAND, -500.0, +500.0,+20.0,-20.0);
+		setpoint_pitch = MAP(setpoint_pitch - s*RADIO_DEAD_BAND, -500.0, +500.0,+25.0,-25.0);
 	}
 
 	if (start == 0)
@@ -481,10 +477,10 @@ int main(void)
 		pid_pitch_output = updatePID(&pid_pitch, setpoint_pitch, gyro_pitch, gy_2);
 		pid_yaw_output   = updatePID(&pid_yaw, setpoint_yaw, gz_2, gz_2);
 
-		motor_1 = throttle_radio - pid_roll_output - pid_pitch_output + CCW*pid_yaw_output;  // CCW
-		motor_2 = throttle_radio + pid_roll_output - pid_pitch_output + CW*pid_yaw_output;  // CW
-		motor_3 = throttle_radio + pid_roll_output + pid_pitch_output + CCW*pid_yaw_output;  // CCW
-		motor_4 = throttle_radio - pid_roll_output + pid_pitch_output + CW*pid_yaw_output;  // CW
+		motor_1 = throttle_radio - pid_roll_output - pid_pitch_output - pid_yaw_output;  // CCW
+		motor_2 = throttle_radio + pid_roll_output - pid_pitch_output + pid_yaw_output;  // CW
+		motor_3 = throttle_radio + pid_roll_output + pid_pitch_output - pid_yaw_output;  // CCW
+		motor_4 = throttle_radio - pid_roll_output + pid_pitch_output + pid_yaw_output;  // CW
 
 		htim3.Instance->CCR1 = (uint32_t)motor_1; /*  Channel 1 Motor 1 */
 		htim3.Instance->CCR2 = (uint32_t)motor_2; /*  Channel 2 Motor 2 */
@@ -493,14 +489,10 @@ int main(void)
 
 	}
 	else{
-
 		resetPID(&pid_roll);
 		resetPID(&pid_pitch);
 		resetPID(&pid_yaw);
-
 	}
-
-
 
 	//measure_time = HAL_GetTick() - loop_timer;
 	while (HAL_GetTick() - loop_timer < sec2milliseconds(SAMPLE_TIME_S));
