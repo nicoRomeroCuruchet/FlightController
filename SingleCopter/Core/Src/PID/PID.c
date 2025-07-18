@@ -78,7 +78,8 @@ float updatePID(PIDController *pid,
     pid->integral = CLIP(pid->integral, pid->min_integral_limit, pid->max_integral_limit);
     float I = pid->Ki * pid->integral;
     // Derivative term
-    float D = 2 * pid->Kd * (((setpoint - pid->prev_setpoint) / pid->delta_T) - measurement_dot) + pid->filter*pid->prev_derivative;
+    //float D = 2 * pid->Kd * (((setpoint - pid->prev_setpoint) / pid->delta_T) - measurement_dot) + pid->filter*pid->prev_derivative;
+    float D = pid->Kd * (((setpoint - pid->prev_setpoint) / pid->delta_T) - measurement_dot);
     // Compute the control output, constrain output
     float output = CLIP(P + I + D, pid->min_output_limit, pid->max_output_limit);
     // Save the current error for the next iteration, e[k-1]

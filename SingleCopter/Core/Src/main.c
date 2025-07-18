@@ -86,7 +86,7 @@
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
 #define RADIO_MIDDLE_FREQ 1500.0f
-#define RADIO_DEAD_BAND 1.0f
+#define RADIO_DEAD_BAND 5.0f
 
 #define MAP(input, in_min, in_max, out_min, out_max) \
     (((input) - (in_min)) * ((out_max) - (out_min)) / ((in_max) - (in_min)) + (out_min))
@@ -329,6 +329,7 @@ int main(void)
 	  gx_2_offset += (float)gyro_axis[0];
 	  gy_2_offset += (float)gyro_axis[1];
 	  gz_2_offset += (float)gyro_axis[2];
+	  HAL_Delay(5);
   }
   gx_2_offset /=2000.0f;
   gy_2_offset /=2000.0f;
@@ -339,14 +340,14 @@ int main(void)
 
   var = 0;
   while(var < 2000) {
-	  QMC_read(&qmc);
-	  read_dmp = Read_DMP();
-	  yaw_w_offset +=  qmc.heading - yaw_offset;
-	  if (read_dmp == 0){
-		  roll_w_offset  += roll - roll_offset;
-		  pitch_w_offset += pitch - pitch_offset;
-		  var++;
-	  }
+	read_dmp = Read_DMP();
+	//QMC_read(&qmc);
+	//yaw_w_offset +=  qmc.compas - yaw_offset;
+	if (read_dmp == 0){
+		roll_w_offset  += roll - roll_offset;
+		pitch_w_offset += pitch - pitch_offset;
+		var++;
+	}
   }
   roll_w_offset  /=var;
   pitch_w_offset /=var;
@@ -358,7 +359,7 @@ int main(void)
   /* USER CODE END 2 */
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  bmp280_init_default_params(&bmp280.params);
+  /*bmp280_init_default_params(&bmp280.params);
   bmp280.params.filter = BMP280_FILTER_2;  // Filter x16
   bmp280.params.oversampling_pressure = BMP280_ULTRA_HIGH_RES; // Oversampling x16
   bmp280.addr = BMP280_I2C_ADDRESS_0;
@@ -381,19 +382,19 @@ int main(void)
 	HAL_Delay(500);
 	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
 	HAL_Delay(500);
-  }
+  }*/
 
   HAL_Delay(200);
 
-  initializePID(&pid_roll, 5.0, 0.0, 0.0, SAMPLE_TIME_S,
+  initializePID(&pid_roll, 5.0, 0.0, 1.0, SAMPLE_TIME_S,
                 PID_LIM_MIN_INT_ROLL, PID_LIM_MAX_INT_ROLL,
                 PID_LIM_MIN_ROLL, PID_LIM_MAX_ROLL);
 
-  initializePID(&pid_pitch, 5.0, 0.0, 0.0, SAMPLE_TIME_S,
+  initializePID(&pid_pitch, 5.0, 0.0, 1.0, SAMPLE_TIME_S,
                 PID_LIM_MIN_INT_PITCH, PID_LIM_MAX_INT_PITCH,
                 PID_LIM_MIN_PITCH, PID_LIM_MAX_PITCH);
 
-  initializePID(&pid_yaw, 0.0, 0.0, 10.0, SAMPLE_TIME_S,
+  initializePID(&pid_yaw, 00.0, 0.0, 10.0, SAMPLE_TIME_S,
                 PID_LIM_MIN_INT_YAW, PID_LIM_MAX_INT_YAW,
                 PID_LIM_MIN_YAW, PID_LIM_MAX_YAW);
 
@@ -405,13 +406,15 @@ int main(void)
   do {
 
 	Read_DMP();  /**/
-	QMC_read(&qmc);
+	//QMC_read(&qmc);
+	//yaw_offset = qmc.compas;
 	HAL_Delay(200);
 
   } while (pulse_ch2 > 1100);// throttle upper 1100 don't start
 
   gyro_roll=gyro_pitch=gyro_yaw=0.0f;
   rate_roll=rate_pitch=rate_yaw=0.0f;
+  gx_2=gy_2=gz_2=0;
   start = 0;
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
   while (1)
@@ -419,13 +422,14 @@ int main(void)
     /* USER CODE END WHILE */
     /* USER CODE BEGIN 3 */
 	loop_timer = HAL_GetTick();
-	QMC_read(&qmc);
+
 	Read_DMP();
-	yaw_w_offset   = qmc.heading - yaw_offset;  // TODO too much drift...
+	read_gyro_only(gyro_axis);
+	//QMC_read(&qmc);
+	//yaw_w_offset   = qmc.compas - yaw_offset;  // TODO too much drift...
 	roll_w_offset  = roll - roll_offset;
 	pitch_w_offset = pitch - pitch_offset;
 
-	read_gyro_only(gyro_axis);
 	gx_2 = ((float)gyro_axis[0] - gx_2_offset)  / LSB_Sensitivity;
 	gy_2 = ((float)gyro_axis[1] - gy_2_offset)  / LSB_Sensitivity;
 	gz_2 = ((float)gyro_axis[2] - gz_2_offset)  / LSB_Sensitivity;
@@ -467,11 +471,12 @@ int main(void)
 		setpoint_pitch=0.0;
 	} else{
 		float s =  (setpoint_pitch > 0) ? 1.0 : -1.0;
-		setpoint_pitch = MAP(setpoint_pitch - s*RADIO_DEAD_BAND, -500.0, +500.0,+25.0,-25.0);
+		setpoint_pitch = -MAP(setpoint_pitch - s*RADIO_DEAD_BAND, -500.0, +500.0,+25.0,-25.0);
 	}
 
 	if (start == 0)
 	{
+
 		// PID controller
 		pid_roll_output  = updatePID(&pid_roll, setpoint_roll, gyro_roll, gx_2);
 		pid_pitch_output = updatePID(&pid_pitch, setpoint_pitch, gyro_pitch, gy_2);
@@ -493,7 +498,6 @@ int main(void)
 		resetPID(&pid_pitch);
 		resetPID(&pid_yaw);
 	}
-
 	//measure_time = HAL_GetTick() - loop_timer;
 	while (HAL_GetTick() - loop_timer < sec2milliseconds(SAMPLE_TIME_S));
 	measure_time = HAL_GetTick() - loop_timer;
