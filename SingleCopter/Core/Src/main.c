@@ -92,8 +92,8 @@
     (((input) - (in_min)) * ((out_max) - (out_min)) / ((in_max) - (in_min)) + (out_min))
 
 #define M_PI 3.14159265358979323846
-#define deg2rad(degrees) degrees * M_PI / 180.0
-#define rad2deg(radians) radians * 180.0 / M_PI
+#define deg2rad(degrees) ((degrees) * (float)(M_PI / 180.0))
+#define rad2deg(radians) ((radians) * (float)(180.0 / M_PI))
 
 #define TRANSMITED_BYTES 10*4
 
@@ -275,7 +275,7 @@ int main(void)
   }
 
   HAL_Delay(250);
-
+/*
   while(pulse_ch1 < 950 || pulse_ch2 < 950 || pulse_ch3 < 950 || pulse_ch4 < 950)
   {
 	  //__HAL_TIM_SET_COUNTER(&htim1, 0);  // reset the counter
@@ -289,7 +289,7 @@ int main(void)
 	  pulse_ch1=pulse_ch2=pulse_ch3=pulse_ch4=0;
 	  HAL_Delay(250);
   }
-
+*/
   /* DMP MPU initialize */
   HAL_Delay(150);
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
@@ -433,7 +433,7 @@ int main(void)
     /* USER CODE BEGIN 3 */
 	loop_timer = HAL_GetTick();
 
-	Read_DMP();
+	read_dmp=Read_DMP();
 	read_gyro_only(gyro_axis);
 	//QMC_read(&qmc);
 	//yaw_w_offset   = qmc.compas - yaw_offset;  // TODO too much drift...
@@ -448,8 +448,15 @@ int main(void)
 	gyro_pitch += gy_2*SAMPLE_TIME_S;
 	gyro_yaw   += gz_2*SAMPLE_TIME_S;
 	
-	gyro_roll  += gyro_pitch * sin(deg2rad(gz_2) * SAMPLE_TIME_S);
-	gyro_pitch -= gyro_roll * sin(deg2rad(gz_2) * SAMPLE_TIME_S);
+	//gyro_roll  += gyro_pitch * sin(deg2rad(gz_2) * SAMPLE_TIME_S);
+	//gyro_pitch -= gyro_roll * sin(deg2rad(gz_2) * SAMPLE_TIME_S);
+    const float dpsi = deg2rad(gz_2) * SAMPLE_TIME_S;   // ya es la rotación, en rad
+    const float roll_prev  = gyro_roll;
+    const float pitch_prev = gyro_pitch;
+
+    gyro_roll  += pitch_prev * dpsi;
+    gyro_pitch -= roll_prev  * dpsi;
+
 
 	if (read_dmp==0){
 		gyro_pitch = gyro_pitch*0.996 + pitch_w_offset*0.004;
@@ -492,10 +499,10 @@ int main(void)
 		pid_pitch_output = updatePID(&pid_pitch, setpoint_pitch, gyro_pitch, gy_2);
 		pid_yaw_output   = updatePID(&pid_yaw, setpoint_yaw, gz_2, gz_2);
 
-		motor_1 = throttle_radio - pid_roll_output - pid_pitch_output - pid_yaw_output;  // CCW
-		motor_2 = throttle_radio + pid_roll_output - pid_pitch_output + pid_yaw_output;  // CW
-		motor_3 = throttle_radio + pid_roll_output + pid_pitch_output - pid_yaw_output;  // CCW
-		motor_4 = throttle_radio - pid_roll_output + pid_pitch_output + pid_yaw_output;  // CW
+		motor_1 = throttle_radio - pid_roll_output - pid_pitch_output - pid_yaw_output;  // Front Right CCW
+		motor_2 = throttle_radio + pid_roll_output - pid_pitch_output + pid_yaw_output;  // Front Left  CW
+		motor_3 = throttle_radio + pid_roll_output + pid_pitch_output - pid_yaw_output;  // Rear Left   CCW
+		motor_4 = throttle_radio - pid_roll_output + pid_pitch_output + pid_yaw_output;  // Rear Right  CW
 
 		htim3.Instance->CCR1 = (uint32_t)motor_1; /*  Channel 1 Motor 1 */
 		htim3.Instance->CCR2 = (uint32_t)motor_2; /*  Channel 2 Motor 2 */

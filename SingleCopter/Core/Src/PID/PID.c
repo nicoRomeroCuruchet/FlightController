@@ -73,7 +73,7 @@ float updatePID(PIDController *pid,
     // Proportional term
     float P = pid->Kp * error;
     // Integral term (using trapezoidal integration for improved accuracy)
-    pid->integral = pid->integral + 0.5 * pid->delta_T  * (error + pid->prev_error);
+    pid->integral = pid->integral + 0.5f * pid->delta_T  * (error + pid->prev_error);
     // constrain internal integral accumulator to prevent windup
     pid->integral = CLIP(pid->integral, pid->min_integral_limit, pid->max_integral_limit);
     float I = pid->Ki * pid->integral;
