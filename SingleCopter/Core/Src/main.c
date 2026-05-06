@@ -88,6 +88,11 @@
 #define RADIO_MIDDLE_FREQ 1500.0f
 #define RADIO_DEAD_BAND 5.0f
 
+#define ARM_HOLD_MS         1000   // ms hay que sostener el gesto para armar/disarmar
+#define ARM_THROTTLE_MAX    1050   // throttle abajo de esto cuenta como "low"
+#define ARM_YAW_LEFT_MAX    1100   // yaw abajo de esto cuenta como "izquierda full"
+#define ARM_YAW_RIGHT_MIN   1900   // yaw arriba de esto cuenta como "derecha full"
+
 #define MAP(input, in_min, in_max, out_min, out_max) \
     (((input) - (in_min)) * ((out_max) - (out_min)) / ((in_max) - (in_min)) + (out_min))
 
@@ -155,7 +160,9 @@ float rate_pitch = 0;
 float rate_yaw = 0;
 
 float throttle_radio = 0;
-uint8_t start=0;
+uint8_t start = 1;   // 0 = armed, 1 = disarmed (default disarmed)
+static uint32_t arm_hold_start_ms = 0;
+static uint32_t disarm_hold_start_ms = 0;
 float motor_1;
 float motor_2;
 float motor_3;
@@ -275,7 +282,7 @@ int main(void)
   }
 
   HAL_Delay(250);
-/*
+
   while(pulse_ch1 < 950 || pulse_ch2 < 950 || pulse_ch3 < 950 || pulse_ch4 < 950)
   {
 	  //__HAL_TIM_SET_COUNTER(&htim1, 0);  // reset the counter
@@ -289,7 +296,7 @@ int main(void)
 	  pulse_ch1=pulse_ch2=pulse_ch3=pulse_ch4=0;
 	  HAL_Delay(250);
   }
-*/
+
   /* DMP MPU initialize */
   HAL_Delay(150);
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
@@ -423,7 +430,7 @@ int main(void)
   gyro_roll=gyro_pitch=gyro_yaw=0.0f;
   rate_roll=rate_pitch=rate_yaw=0.0f;
   gx_2=gy_2=gz_2=0;
-  start = 0;
+  start = 1;   // arrancar disarmed; gesto explícito requerido
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
   while (1)
   {
@@ -494,11 +501,50 @@ int main(void)
 	 * Throttle queda en MOTOR_TURN_OFF; con CLIP, los motores se mantienen a MOTOR_MIN_SPEED.
 	 * Setpoints en 0 → PID intenta nivelar mientras el quad desciende.
 	 */
-	if ((HAL_GetTick() - last_radio_update_ms) > FAILSAFE_MS) {
+	uint32_t failsafe_active = ((HAL_GetTick() - last_radio_update_ms) > FAILSAFE_MS);
+	if (failsafe_active) {
 		throttle_radio = MOTOR_TURN_OFF;
 		setpoint_roll  = 0.0f;
 		setpoint_pitch = 0.0f;
 		setpoint_yaw   = 0.0f;
+	}
+
+	/* Arming/disarming via stick gesture (solo cuando hay radio activa).
+	 *   Armar:    throttle low + yaw FULL DERECHA, sostenido ARM_HOLD_MS
+	 *   Disarmar: throttle low + yaw FULL IZQUIERDA, sostenido ARM_HOLD_MS
+	 */
+	if (!failsafe_active) {
+		uint32_t now = HAL_GetTick();
+		uint32_t throttle_low = (pulse_ch2 < ARM_THROTTLE_MAX);
+		uint32_t yaw_left     = (pulse_ch1 < ARM_YAW_LEFT_MAX);
+		uint32_t yaw_right    = (pulse_ch1 > ARM_YAW_RIGHT_MIN);
+
+		if (start != 0) {
+			// Disarmed → buscar gesto de arm
+			if (throttle_low && yaw_right) {
+				if (arm_hold_start_ms == 0) {
+					arm_hold_start_ms = now;
+				} else if ((now - arm_hold_start_ms) > ARM_HOLD_MS) {
+					resetPID(&pid_roll);
+					resetPID(&pid_pitch);
+					resetPID(&pid_yaw);
+					start = 0;   // Armed
+				}
+			} else {
+				arm_hold_start_ms = 0;
+			}
+		} else {
+			// Armed → buscar gesto de disarm
+			if (throttle_low && yaw_left) {
+				if (disarm_hold_start_ms == 0) {
+					disarm_hold_start_ms = now;
+				} else if ((now - disarm_hold_start_ms) > ARM_HOLD_MS) {
+					start = 1;   // Disarmed
+				}
+			} else {
+				disarm_hold_start_ms = 0;
+			}
+		}
 	}
 
 	if (start == 0)
@@ -524,10 +570,15 @@ int main(void)
 		htim3.Instance->CCR4 = (uint32_t)motor_4; /*  Channel 4 Motor 4 */
 
 	}
-	else{
+	else {
 		resetPID(&pid_roll);
 		resetPID(&pid_pitch);
 		resetPID(&pid_yaw);
+		// Disarmed: forzar motores a turn-off (no quedarse con el último CCR escrito)
+		htim3.Instance->CCR1 = (uint32_t)MOTOR_TURN_OFF;
+		htim3.Instance->CCR2 = (uint32_t)MOTOR_TURN_OFF;
+		htim3.Instance->CCR3 = (uint32_t)MOTOR_TURN_OFF;
+		htim3.Instance->CCR4 = (uint32_t)MOTOR_TURN_OFF;
 	}
 	//measure_time = HAL_GetTick() - loop_timer;
 	while (HAL_GetTick() - loop_timer < sec2milliseconds(SAMPLE_TIME_S));
