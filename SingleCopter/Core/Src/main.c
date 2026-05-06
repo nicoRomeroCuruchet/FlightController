@@ -411,7 +411,6 @@ int main(void)
   resetPID(&pid_roll);
   resetPID(&pid_yaw);
 
-
   do {
 
 	Read_DMP();  /**/
@@ -489,6 +488,17 @@ int main(void)
 	} else{
 		float s =  (setpoint_pitch > 0) ? 1.0 : -1.0;
 		setpoint_pitch = -MAP(setpoint_pitch - s*RADIO_DEAD_BAND, -500.0, +500.0,+25.0,-25.0);
+	}
+
+	/* Radio failsafe: si no llegó un pulso válido en FAILSAFE_MS, forzar valores seguros.
+	 * Throttle queda en MOTOR_TURN_OFF; con CLIP, los motores se mantienen a MOTOR_MIN_SPEED.
+	 * Setpoints en 0 → PID intenta nivelar mientras el quad desciende.
+	 */
+	if ((HAL_GetTick() - last_radio_update_ms) > FAILSAFE_MS) {
+		throttle_radio = MOTOR_TURN_OFF;
+		setpoint_roll  = 0.0f;
+		setpoint_pitch = 0.0f;
+		setpoint_yaw   = 0.0f;
 	}
 
 	if (start == 0)

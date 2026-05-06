@@ -17,6 +17,8 @@ volatile uint32_t rising_ch4 =0;
 volatile uint32_t pulse_ch4 = 0;
 volatile uint8_t  state_ch4 = 0;
 
+volatile uint32_t last_radio_update_ms = 0;
+
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 {
 	if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1) {
@@ -34,7 +36,10 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 
 	            float refClock = TIMCLOCK / (float)PRESCALAR;
 	            uint32_t tmp = diff * (1000000.0f / refClock);
-	            if (990 < tmp && tmp < 2000 ) pulse_ch1 = tmp;
+	            if (990 < tmp && tmp < 2000 ) {
+	                pulse_ch1 = tmp;
+	                last_radio_update_ms = HAL_GetTick();
+	            }
 	            // Reset for next rising edge
 	            state_ch1 = 0;
 	            __HAL_TIM_SET_CAPTUREPOLARITY(htim, TIM_CHANNEL_1, TIM_INPUTCHANNELPOLARITY_RISING);
@@ -56,7 +61,10 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 
 	        float refClock = TIMCLOCK / (float)PRESCALAR;
 	        uint32_t tmp = diff * (1000000.0f / refClock);
-			if (990 < tmp && tmp < 2000 ) pulse_ch2 = tmp;
+			if (990 < tmp && tmp < 2000 ) {
+	            pulse_ch2 = tmp;
+	            last_radio_update_ms = HAL_GetTick();
+	        }
 
 	        // Reset for next rising edge
 	        state_ch2 = 0;
@@ -79,7 +87,10 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 
 	        float refClock = TIMCLOCK / (float)PRESCALAR;
 	        uint32_t tmp = diff * (1000000.0f / refClock);
-			if (990 < tmp && tmp < 2000 ) pulse_ch3 = tmp;
+			if (990 < tmp && tmp < 2000 ) {
+	            pulse_ch3 = tmp;
+	            last_radio_update_ms = HAL_GetTick();
+	        }
 
 	        // Reset for next rising edge
 	        state_ch3 = 0;
@@ -102,7 +113,10 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 
 	        float refClock = TIMCLOCK / (float)PRESCALAR;
 	        uint32_t tmp = diff * (1000000.0f / refClock);
-			if (990 < tmp && tmp < 2000 ) pulse_ch4 = tmp;
+			if (990 < tmp && tmp < 2000 ) {
+	            pulse_ch4 = tmp;
+	            last_radio_update_ms = HAL_GetTick();
+	        }
 
 	        // Reset for next rising edge
 	        state_ch4 = 0;
