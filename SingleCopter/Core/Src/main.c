@@ -26,7 +26,7 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-#define sec2milliseconds(x) x*1000
+#define sec2milliseconds(x) (x)*1000
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -35,46 +35,9 @@
 #define LSB_Sensitivity 131.0f // 65.5f	// Gyro degrees conversions
 #define ALPHA 1.0  				// Gyro low pass filter (1.0 no filter, raw data)
 #define GYRO_SING -1.0
-#define SAMPLE_TIME_S 0.001f 	// 1Khz!
-/* Controller parameters */
-/***********************************************************/
-/************************** ROLL **************************/
-/***********************************************************/
-#define kp_roll  1.0f
-#define ki_roll  0.0f
-#define kd_roll  0.0f
+// SAMPLE_TIME_S definido en PID/PID.h (compartido con usart.c)
+/* Controller limits (PID_LIM_*) definidos en PID/PID.h, compartidos con usart.c */
 
-#define PID_LIM_MIN_INT_ROLL -50.0f
-#define PID_LIM_MAX_INT_ROLL +50.0f
-
-#define PID_LIM_MIN_ROLL -400.0f
-#define PID_LIM_MAX_ROLL +400.0f
-/***********************************************************/
-/************************** PITCH **************************/
-/***********************************************************/
-#define kp_pitch kp_roll
-#define ki_pitch ki_roll
-#define kd_pitch kd_roll
-
-#define PID_LIM_MIN_INT_PITCH PID_LIM_MIN_INT_ROLL
-#define PID_LIM_MAX_INT_PITCH PID_LIM_MAX_INT_ROLL
-
-#define PID_LIM_MIN_PITCH PID_LIM_MIN_ROLL
-#define PID_LIM_MAX_PITCH PID_LIM_MAX_ROLL
-/***********************************************************/
-/************************** YAW ****************************/
-/***********************************************************/
-#define kp_yaw  1.0f
-#define ki_yaw  0.0f
-#define kd_yaw  0.0f
-
-#define PID_LIM_MIN_INT_YAW -100.0f
-#define PID_LIM_MAX_INT_YAW +100.0f
-
-#define PID_LIM_MIN_YAW -400.0f
-#define PID_LIM_MAX_YAW +400.0f
-/**********************************************************/
-/**********************************************************/
 #define MOTOR_TURN_OFF 1000
 #define MOTOR_MAX_SPEED 2000
 #define MOTOR_MIN_SPEED 1100

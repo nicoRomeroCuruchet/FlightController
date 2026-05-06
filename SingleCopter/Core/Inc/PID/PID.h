@@ -1,6 +1,24 @@
 #ifndef PID_CONTROLLER_H
 #define PID_CONTROLLER_H
 
+#define SAMPLE_TIME_S 0.001f   // PID sample time = control loop period (1 kHz)
+
+/* PID output and integral limits — compartidos entre main.c y usart.c */
+#define PID_LIM_MIN_INT_ROLL  -50.0f
+#define PID_LIM_MAX_INT_ROLL  +50.0f
+#define PID_LIM_MIN_ROLL      -400.0f
+#define PID_LIM_MAX_ROLL      +400.0f
+
+#define PID_LIM_MIN_INT_PITCH PID_LIM_MIN_INT_ROLL
+#define PID_LIM_MAX_INT_PITCH PID_LIM_MAX_INT_ROLL
+#define PID_LIM_MIN_PITCH     PID_LIM_MIN_ROLL
+#define PID_LIM_MAX_PITCH     PID_LIM_MAX_ROLL
+
+#define PID_LIM_MIN_INT_YAW   -100.0f
+#define PID_LIM_MAX_INT_YAW   +100.0f
+#define PID_LIM_MIN_YAW       -400.0f
+#define PID_LIM_MAX_YAW       +400.0f
+
 #define CLIP(value, min, max) \
     ((value) < (min) ? (min) : ((value) > (max) ? (max) : (value)))
 

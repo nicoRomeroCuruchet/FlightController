@@ -15,12 +15,7 @@ extern uint8_t rx_buffer[TRANSMITED_BYTES];
 extern float received_values[10];
 extern PIDController pid_roll, pid_pitch, pid_yaw;
 
-#define SAMPLE_TIME_S 0.002f 	// 1Khz!
-#define PID_LIM_MIN_INT_ROLL -50.0f
-#define PID_LIM_MAX_INT_ROLL +50.0f
-
-#define PID_LIM_MIN_ROLL -400.0f
-#define PID_LIM_MAX_ROLL +400.0f
+// SAMPLE_TIME_S y PID_LIM_* definidos en PID/PID.h (compartidos con main.c)
 
 
 static uint32_t crc32_update(uint32_t crc, const uint8_t *data, size_t len)
@@ -60,15 +55,15 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
             			                  received_values[4],
 										  received_values[5],
 										 SAMPLE_TIME_S,
-										 PID_LIM_MIN_INT_ROLL, PID_LIM_MAX_INT_ROLL,
-										 PID_LIM_MIN_ROLL, PID_LIM_MAX_ROLL);
+										 PID_LIM_MIN_INT_PITCH, PID_LIM_MAX_INT_PITCH,
+										 PID_LIM_MIN_PITCH, PID_LIM_MAX_PITCH);
 
             	initializePID(&pid_yaw, received_values[6],
             			                 received_values[7],
 										 received_values[8],
 										 SAMPLE_TIME_S,
-										 PID_LIM_MIN_INT_ROLL, PID_LIM_MAX_INT_ROLL,
-										 PID_LIM_MIN_ROLL, PID_LIM_MAX_ROLL);
+										 PID_LIM_MIN_INT_YAW, PID_LIM_MAX_INT_YAW,
+										 PID_LIM_MIN_YAW, PID_LIM_MAX_YAW);
 
             	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
             }
