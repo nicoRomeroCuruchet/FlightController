@@ -402,11 +402,11 @@ int main(void)
 
   HAL_Delay(200);
 
-  initializePID(&pid_roll, 5.0, 0.0, 1.0, SAMPLE_TIME_S,
+  initializePID(&pid_roll, 5.0, 0.0, 0.0, SAMPLE_TIME_S,
                 PID_LIM_MIN_INT_ROLL, PID_LIM_MAX_INT_ROLL,
                 PID_LIM_MIN_ROLL, PID_LIM_MAX_ROLL);
 
-  initializePID(&pid_pitch, 5.0, 0.0, 1.0, SAMPLE_TIME_S,
+  initializePID(&pid_pitch, 5.0, 0.0, 0.0, SAMPLE_TIME_S,
                 PID_LIM_MIN_INT_PITCH, PID_LIM_MAX_INT_PITCH,
                 PID_LIM_MIN_PITCH, PID_LIM_MAX_PITCH);
 
@@ -549,19 +549,18 @@ int main(void)
 
 	if (start == 0)
 	{
-
 		// PID controller
 		pid_roll_output  = updatePID(&pid_roll, setpoint_roll, gyro_roll, gx_2);
 		pid_pitch_output = updatePID(&pid_pitch, setpoint_pitch, gyro_pitch, gy_2);
 		pid_yaw_output   = updatePID(&pid_yaw, setpoint_yaw, gz_2, gz_2);
 
-		motor_1 = CLIP(throttle_radio - pid_roll_output - pid_pitch_output - pid_yaw_output,
+		motor_1 = CLIP(throttle_radio + pid_roll_output - pid_pitch_output - pid_yaw_output,
 		               MOTOR_MIN_SPEED, MOTOR_MAX_SPEED);  // Front Right CCW
-		motor_2 = CLIP(throttle_radio + pid_roll_output - pid_pitch_output + pid_yaw_output,
+		motor_2 = CLIP(throttle_radio - pid_roll_output - pid_pitch_output + pid_yaw_output,
 		               MOTOR_MIN_SPEED, MOTOR_MAX_SPEED);  // Front Left  CW
-		motor_3 = CLIP(throttle_radio + pid_roll_output + pid_pitch_output - pid_yaw_output,
+		motor_3 = CLIP(throttle_radio - pid_roll_output + pid_pitch_output - pid_yaw_output,
 		               MOTOR_MIN_SPEED, MOTOR_MAX_SPEED);  // Rear Left   CCW
-		motor_4 = CLIP(throttle_radio - pid_roll_output + pid_pitch_output + pid_yaw_output,
+		motor_4 = CLIP(throttle_radio + pid_roll_output + pid_pitch_output + pid_yaw_output,
 		               MOTOR_MIN_SPEED, MOTOR_MAX_SPEED);  // Rear Right  CW
 
 		htim3.Instance->CCR1 = (uint32_t)motor_1; /*  Channel 1 Motor 1 */
