@@ -499,15 +499,19 @@ int main(void)
 		pid_pitch_output = updatePID(&pid_pitch, setpoint_pitch, gyro_pitch, gy_2);
 		pid_yaw_output   = updatePID(&pid_yaw, setpoint_yaw, gz_2, gz_2);
 
-		motor_1 = throttle_radio - pid_roll_output - pid_pitch_output - pid_yaw_output;  // Front Right CCW
-		motor_2 = throttle_radio + pid_roll_output - pid_pitch_output + pid_yaw_output;  // Front Left  CW
-		motor_3 = throttle_radio + pid_roll_output + pid_pitch_output - pid_yaw_output;  // Rear Left   CCW
-		motor_4 = throttle_radio - pid_roll_output + pid_pitch_output + pid_yaw_output;  // Rear Right  CW
+		motor_1 = CLIP(throttle_radio - pid_roll_output - pid_pitch_output - pid_yaw_output,
+		               MOTOR_MIN_SPEED, MOTOR_MAX_SPEED);  // Front Right CCW
+		motor_2 = CLIP(throttle_radio + pid_roll_output - pid_pitch_output + pid_yaw_output,
+		               MOTOR_MIN_SPEED, MOTOR_MAX_SPEED);  // Front Left  CW
+		motor_3 = CLIP(throttle_radio + pid_roll_output + pid_pitch_output - pid_yaw_output,
+		               MOTOR_MIN_SPEED, MOTOR_MAX_SPEED);  // Rear Left   CCW
+		motor_4 = CLIP(throttle_radio - pid_roll_output + pid_pitch_output + pid_yaw_output,
+		               MOTOR_MIN_SPEED, MOTOR_MAX_SPEED);  // Rear Right  CW
 
 		htim3.Instance->CCR1 = (uint32_t)motor_1; /*  Channel 1 Motor 1 */
 		htim3.Instance->CCR2 = (uint32_t)motor_2; /*  Channel 2 Motor 2 */
-	    htim3.Instance->CCR3 = (uint32_t)motor_3; /*  Channel 3 Motor 3 */
-	    htim3.Instance->CCR4 = (uint32_t)motor_4; /*  Channel 4 Motor 4 */
+		htim3.Instance->CCR3 = (uint32_t)motor_3; /*  Channel 3 Motor 3 */
+		htim3.Instance->CCR4 = (uint32_t)motor_4; /*  Channel 4 Motor 4 */
 
 	}
 	else{
