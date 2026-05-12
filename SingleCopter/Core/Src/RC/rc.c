@@ -34,9 +34,9 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 	                ? (now - rising_ch1)
 	                : (now + (htim->Instance->ARR - rising_ch1));
 
-	            float refClock = TIMCLOCK / (float)PRESCALAR;
+	            float refClock = TIMCLOCK / (float)(PRESCALAR + 1);
 	            uint32_t tmp = diff * (1000000.0f / refClock);
-	            if (990 < tmp && tmp < 2000 ) {
+	            if (990 < tmp && tmp <= 2000 ) {
 	                pulse_ch1 = tmp;
 	                last_radio_update_ms = HAL_GetTick();
 	            }
@@ -59,9 +59,9 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 	            ? (now - rising_ch2)
 	            : (now + (htim->Instance->ARR - rising_ch2));
 
-	        float refClock = TIMCLOCK / (float)PRESCALAR;
+	        float refClock = TIMCLOCK / (float)(PRESCALAR + 1);
 	        uint32_t tmp = diff * (1000000.0f / refClock);
-			if (990 < tmp && tmp < 2000 ) {
+			if (990 < tmp && tmp <= 2000 ) {
 	            pulse_ch2 = tmp;
 	            last_radio_update_ms = HAL_GetTick();
 	        }
@@ -85,9 +85,9 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 	            ? (now - rising_ch3)
 	            : (now + (htim->Instance->ARR - rising_ch3));
 
-	        float refClock = TIMCLOCK / (float)PRESCALAR;
+	        float refClock = TIMCLOCK / (float)(PRESCALAR + 1);
 	        uint32_t tmp = diff * (1000000.0f / refClock);
-			if (990 < tmp && tmp < 2000 ) {
+			if (990 < tmp && tmp <= 2000 ) {
 	            pulse_ch3 = tmp;
 	            last_radio_update_ms = HAL_GetTick();
 	        }
@@ -111,9 +111,9 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 	            ? (now - rising_ch4)
 	            : (now + (htim->Instance->ARR - rising_ch4));
 
-	        float refClock = TIMCLOCK / (float)PRESCALAR;
+	        float refClock = TIMCLOCK / (float)(PRESCALAR + 1);
 	        uint32_t tmp = diff * (1000000.0f / refClock);
-			if (990 < tmp && tmp < 2000 ) {
+			if (990 < tmp && tmp <= 2000 ) {
 	            pulse_ch4 = tmp;
 	            last_radio_update_ms = HAL_GetTick();
 	        }

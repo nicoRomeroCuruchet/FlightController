@@ -1,7 +1,7 @@
 #ifndef PID_CONTROLLER_H
 #define PID_CONTROLLER_H
 
-#define SAMPLE_TIME_S 0.001f   // PID sample time = control loop period (1 kHz)
+#define SAMPLE_TIME_S 0.002f   // PID sample time = control loop period (1 kHz)
 
 /* PID output and integral limits — compartidos entre main.c y usart.c */
 #define PID_LIM_MIN_INT_ROLL  -50.0f

@@ -63,7 +63,8 @@
 #define deg2rad(degrees) ((degrees) * (float)(M_PI / 180.0))
 #define rad2deg(radians) ((radians) * (float)(180.0 / M_PI))
 
-#define TRANSMITED_BYTES 10*4
+/* Protocolo UART (TRANSMITED_BYTES) definido en usart/usart.h
+ * y compartido entre main.c y usart.c. */
 
 /* USER CODE END PM */
 
@@ -358,15 +359,21 @@ int main(void)
 
   HAL_Delay(200);
 
-  initializePID(&pid_roll, 15.0, 0.0, 0.0, SAMPLE_TIME_S,
+  /* Starting gains para F450 / 1400kv / 10x4.7. Punto de partida conservador;
+   * tunear en suelo atado, una ganancia a la vez, ~20% por iteración.
+   *   Roll/Pitch: angle control. Kp lleva al setpoint, Kd amortigua.
+   *   Yaw:        rate control (sin mag). Kp para tracking del stick (rate),
+   *               Kd para damping. Ki=0 porque sin referencia absoluta
+   *               la integral del error de rate solo introduce drift. */
+  initializePID(&pid_roll,   6.0, 0.0, 3.0, SAMPLE_TIME_S,
                 PID_LIM_MIN_INT_ROLL, PID_LIM_MAX_INT_ROLL,
                 PID_LIM_MIN_ROLL, PID_LIM_MAX_ROLL);
 
-  initializePID(&pid_pitch, 15.0, 0.0, 0.0, SAMPLE_TIME_S,
+  initializePID(&pid_pitch,  6.0, 0.0, 3.0, SAMPLE_TIME_S,
                 PID_LIM_MIN_INT_PITCH, PID_LIM_MAX_INT_PITCH,
                 PID_LIM_MIN_PITCH, PID_LIM_MAX_PITCH);
 
-  initializePID(&pid_yaw, 00.0, 0.0, 10.0, SAMPLE_TIME_S,
+  initializePID(&pid_yaw,    3.0, 0.0, 8.0, SAMPLE_TIME_S,
                 PID_LIM_MIN_INT_YAW, PID_LIM_MAX_INT_YAW,
                 PID_LIM_MIN_YAW, PID_LIM_MAX_YAW);
 
@@ -815,7 +822,7 @@ static void MX_USART2_UART_Init(void)
 
   /* USER CODE END USART2_Init 1 */
   huart2.Instance = USART2;
-  huart2.Init.BaudRate = 115200;
+  huart2.Init.BaudRate = 57600;   // Reducido desde 115200 por jitter de SoftwareSerial+WiFi del ESP8266
   huart2.Init.WordLength = UART_WORDLENGTH_8B;
   huart2.Init.StopBits = UART_STOPBITS_1;
   huart2.Init.Parity = UART_PARITY_NONE;
