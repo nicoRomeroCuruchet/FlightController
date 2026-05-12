@@ -72,7 +72,6 @@ I2C_HandleTypeDef hi2c1;
 I2C_HandleTypeDef hi2c2;
 
 TIM_HandleTypeDef htim1;
-TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 
 UART_HandleTypeDef huart2;
@@ -150,7 +149,6 @@ static void MX_TIM3_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_I2C2_Init(void);
-static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -194,7 +192,6 @@ int main(void)
   MX_TIM1_Init();
   MX_USART2_UART_Init();
   MX_I2C2_Init();
-  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
 
   /*Initialize turn off motors */
@@ -202,15 +199,11 @@ int main(void)
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);  			/* Motor 2 */
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3); 		 	/* Motor 3 */
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);  			/* Motor 4 */
-  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);  			/* Motor 5 */
-  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);  			/* Motor 6 */
   /*turn off motors and center servos */
   htim3.Instance->CCR1 = (uint32_t)MOTOR_TURN_OFF;      /*  Channel 1 Motor 1 */
   htim3.Instance->CCR2 = (uint32_t)MOTOR_TURN_OFF;      /*  Channel 2 Motor 2 */
   htim3.Instance->CCR3 = (uint32_t)MOTOR_TURN_OFF;      /*  Channel 3 Motor 3 */
   htim3.Instance->CCR4 = (uint32_t)MOTOR_TURN_OFF;      /*  Channel 4 Motor 4 */
-  htim2.Instance->CCR1 = (uint32_t)MOTOR_TURN_OFF;      /*  Channel 1 Motor 5 */
-  htim2.Instance->CCR2 = (uint32_t)MOTOR_TURN_OFF;      /*  Channel 2 Motor 6 */
 
   // turn off magnetometer
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET);
@@ -365,11 +358,11 @@ int main(void)
 
   HAL_Delay(200);
 
-  initializePID(&pid_roll, 5.0, 0.0, 0.0, SAMPLE_TIME_S,
+  initializePID(&pid_roll, 15.0, 0.0, 0.0, SAMPLE_TIME_S,
                 PID_LIM_MIN_INT_ROLL, PID_LIM_MAX_INT_ROLL,
                 PID_LIM_MIN_ROLL, PID_LIM_MAX_ROLL);
 
-  initializePID(&pid_pitch, 5.0, 0.0, 0.0, SAMPLE_TIME_S,
+  initializePID(&pid_pitch, 15.0, 0.0, 0.0, SAMPLE_TIME_S,
                 PID_LIM_MIN_INT_PITCH, PID_LIM_MAX_INT_PITCH,
                 PID_LIM_MIN_PITCH, PID_LIM_MAX_PITCH);
 
@@ -517,13 +510,13 @@ int main(void)
 		pid_pitch_output = updatePID(&pid_pitch, setpoint_pitch, gyro_pitch, gy_2);
 		pid_yaw_output   = updatePID(&pid_yaw, setpoint_yaw, gz_2, gz_2);
 
-		motor_1 = CLIP(throttle_radio + pid_roll_output - pid_pitch_output - pid_yaw_output,
+		motor_1 = CLIP(throttle_radio - pid_roll_output - pid_pitch_output - pid_yaw_output,
 		               MOTOR_MIN_SPEED, MOTOR_MAX_SPEED);  // Front Right CCW
-		motor_2 = CLIP(throttle_radio - pid_roll_output - pid_pitch_output + pid_yaw_output,
+		motor_2 = CLIP(throttle_radio + pid_roll_output - pid_pitch_output + pid_yaw_output,
 		               MOTOR_MIN_SPEED, MOTOR_MAX_SPEED);  // Front Left  CW
-		motor_3 = CLIP(throttle_radio - pid_roll_output + pid_pitch_output - pid_yaw_output,
+		motor_3 = CLIP(throttle_radio + pid_roll_output + pid_pitch_output - pid_yaw_output,
 		               MOTOR_MIN_SPEED, MOTOR_MAX_SPEED);  // Rear Left   CCW
-		motor_4 = CLIP(throttle_radio + pid_roll_output + pid_pitch_output + pid_yaw_output,
+		motor_4 = CLIP(throttle_radio - pid_roll_output + pid_pitch_output + pid_yaw_output,
 		               MOTOR_MIN_SPEED, MOTOR_MAX_SPEED);  // Rear Right  CW
 
 		htim3.Instance->CCR1 = (uint32_t)motor_1; /*  Channel 1 Motor 1 */
@@ -736,69 +729,6 @@ static void MX_TIM1_Init(void)
 }
 
 /**
-  * @brief TIM2 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM2_Init(void)
-{
-
-  /* USER CODE BEGIN TIM2_Init 0 */
-
-  /* USER CODE END TIM2_Init 0 */
-
-  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-  TIM_OC_InitTypeDef sConfigOC = {0};
-
-  /* USER CODE BEGIN TIM2_Init 1 */
-
-  /* USER CODE END TIM2_Init 1 */
-  htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 83;
-  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 3999;
-  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
-  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_TIM_PWM_Init(&htim2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 0;
-  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-  if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM2_Init 2 */
-
-  /* USER CODE END TIM2_Init 2 */
-  HAL_TIM_MspPostInit(&htim2);
-
-}
-
-/**
   * @brief TIM3 Initialization Function
   * @param None
   * @retval None
@@ -910,8 +840,8 @@ static void MX_USART2_UART_Init(void)
 static void MX_GPIO_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
-/* USER CODE BEGIN MX_GPIO_Init_1 */
-/* USER CODE END MX_GPIO_Init_1 */
+  /* USER CODE BEGIN MX_GPIO_Init_1 */
+  /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
@@ -938,8 +868,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-/* USER CODE BEGIN MX_GPIO_Init_2 */
-/* USER CODE END MX_GPIO_Init_2 */
+  /* USER CODE BEGIN MX_GPIO_Init_2 */
+  /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
@@ -960,8 +890,7 @@ void Error_Handler(void)
   }
   /* USER CODE END Error_Handler_Debug */
 }
-
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
   *         where the assert_param error has occurred.
