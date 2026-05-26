@@ -131,6 +131,11 @@ float motor_2;
 float motor_3;
 float motor_4;
 
+/* Peso del DMP en el filtro complementario gyro<->DMP.
+ * gyro_angle = (1 - beta) * gyro_integrated + beta * dmp_angle.
+ * Tuneable en vivo desde la GUI Python. Default = 0.04 (~125 ms time const). */
+float comp_filter_beta = 0.04f;
+
 BMP280_HandleTypedef bmp280;
 QMC_t qmc;
 
@@ -332,31 +337,6 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  /*bmp280_init_default_params(&bmp280.params);
-  bmp280.params.filter = BMP280_FILTER_2;  // Filter x16
-  bmp280.params.oversampling_pressure = BMP280_ULTRA_HIGH_RES; // Oversampling x16
-  bmp280.addr = BMP280_I2C_ADDRESS_0;
-  bmp280.i2c = &hi2c2;
-
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
-  HAL_Delay(200);
-
-  while (!bmp280_init(&bmp280, &bmp280.params)) {
-	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);
-	HAL_Delay(500);
-	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
-	HAL_Delay(500);
-  }
-
-  HAL_Delay(200);
-  while ((QMC_init(&qmc, &hi2c2 ,200)== -1)) {
-	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET);
-	HAL_Delay(500);
-	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
-	HAL_Delay(500);
-  }*/
-
   HAL_Delay(200);
 
   /* Starting gains para F450 / 1400kv / 10x4.7. Punto de partida conservador;
@@ -383,18 +363,16 @@ int main(void)
 
   do {
 
-	Read_DMP();  /**/
-	//QMC_read(&qmc);
-	//yaw_offset = qmc.compas;
+	Read_DMP();
 	HAL_Delay(200);
 
-  } while (pulse_ch2 > 1100);// throttle upper 1100 don't start
+  } while (pulse_ch2 > 1100);
 
   gyro_roll=gyro_pitch=gyro_yaw=0.0f;
   rate_roll=rate_pitch=rate_yaw=0.0f;
   gx_2=gy_2=gz_2=0;
   start = 1;   // arrancar disarmed; gesto explícito requerido
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+  //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
   while (1)
   {
     /* USER CODE END WHILE */
@@ -404,8 +382,6 @@ int main(void)
 
 	read_dmp=Read_DMP();
 	read_gyro_only(gyro_axis);
-	//QMC_read(&qmc);
-	//yaw_w_offset   = qmc.compas - yaw_offset;  // TODO too much drift...
 	roll_w_offset  = roll - roll_offset;
 	pitch_w_offset = pitch - pitch_offset;
 
@@ -426,11 +402,11 @@ int main(void)
     gyro_roll  += pitch_prev * dpsi;
     gyro_pitch -= roll_prev  * dpsi;
 
-
 	if (read_dmp==0){
-		gyro_pitch = gyro_pitch*0.996 + pitch_w_offset*0.004;
-		gyro_roll = gyro_roll*0.996 + roll_w_offset*0.004;
-		//gyro_yaw = gyro_yaw*0.96 + yaw_w_offset*0.04;
+		const float alpha = 1.0f - comp_filter_beta;
+		gyro_pitch = gyro_pitch*alpha + pitch_w_offset*comp_filter_beta;
+		gyro_roll  = gyro_roll *alpha + roll_w_offset *comp_filter_beta;
+		//gyro_yaw = gyro_yaw*alpha + yaw_w_offset *comp_filter_beta;
 	}
 
 	//radio set-points
@@ -462,8 +438,7 @@ int main(void)
 
 	/* Radio failsafe: si no llegó un pulso válido en FAILSAFE_MS, forzar valores seguros.
 	 * Throttle queda en MOTOR_TURN_OFF; con CLIP, los motores se mantienen a MOTOR_MIN_SPEED.
-	 * Setpoints en 0 → PID intenta nivelar mientras el quad desciende.
-	 */
+	 * Setpoints en 0 → PID intenta nivelar mientras el quad desciende.  */
 	uint32_t failsafe_active = ((HAL_GetTick() - last_radio_update_ms) > FAILSAFE_MS);
 	if (failsafe_active) {
 		throttle_radio = MOTOR_TURN_OFF;
@@ -471,11 +446,9 @@ int main(void)
 		setpoint_pitch = 0.0f;
 		setpoint_yaw   = 0.0f;
 	}
-
 	/* Arming/disarming via stick gesture (solo cuando hay radio activa).
 	 *   Armar:    throttle low + yaw FULL DERECHA, sostenido ARM_HOLD_MS
-	 *   Disarmar: throttle low + yaw FULL IZQUIERDA, sostenido ARM_HOLD_MS
-	 */
+	 *   Disarmar: throttle low + yaw FULL IZQUIERDA, sostenido ARM_HOLD_MS */
 	if (!failsafe_active) {
 		uint32_t now = HAL_GetTick();
 		uint32_t throttle_low = (pulse_ch2 < ARM_THROTTLE_MAX);
@@ -517,6 +490,19 @@ int main(void)
 		pid_pitch_output = updatePID(&pid_pitch, setpoint_pitch, gyro_pitch, gy_2);
 		pid_yaw_output   = updatePID(&pid_yaw, setpoint_yaw, gz_2, gz_2);
 
+		/*                y
+		 *                ^
+		 * Motor 3 CCW    |    motor2  CW
+ 		 *          \     |     /
+		 *   		 \    |    /
+		 *		      \   |   /
+		 *		   	      CM  ------>  x
+		 *		       /      \
+		 *		      /        \
+		 *		     /          \
+		 *   motor 4 CW 	motor 1 CCW
+		 */
+
 		motor_1 = CLIP(throttle_radio - pid_roll_output - pid_pitch_output - pid_yaw_output,
 		               MOTOR_MIN_SPEED, MOTOR_MAX_SPEED);  // Front Right CCW
 		motor_2 = CLIP(throttle_radio + pid_roll_output - pid_pitch_output + pid_yaw_output,
@@ -537,6 +523,7 @@ int main(void)
 		resetPID(&pid_pitch);
 		resetPID(&pid_yaw);
 		// Disarmed: forzar motores a turn-off (no quedarse con el último CCR escrito)
+		motor_1=motor_2=motor_3=motor_4=MOTOR_TURN_OFF;
 		htim3.Instance->CCR1 = (uint32_t)MOTOR_TURN_OFF;
 		htim3.Instance->CCR2 = (uint32_t)MOTOR_TURN_OFF;
 		htim3.Instance->CCR3 = (uint32_t)MOTOR_TURN_OFF;

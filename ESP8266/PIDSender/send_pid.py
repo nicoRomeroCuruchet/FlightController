@@ -20,7 +20,7 @@ import argparse
 import socket
 import sys
 
-DEFAULT_HOST = "192.168.0.12"
+DEFAULT_HOST = "192.168.0.10"
 DEFAULT_PORT = 8888
 
 # Defaults match main.c (líneas 361-371): F450 / 1400kv / 10x4.7 starting points
@@ -29,6 +29,9 @@ DEFAULT_GAINS = {
     "pitch": {"kp": 6.0, "ki": 0.0, "kd": 3.0},
     "yaw":   {"kp": 3.0, "ki": 0.0, "kd": 8.0},
 }
+# Filtro complementario gyro<->DMP: peso del DMP por update (~200 Hz).
+# 0.04 ≈ τ=125ms. Subir = más DMP (corrige drift, más sensible a vibración).
+DEFAULT_COMP_BETA = 0.04
 
 AXES = ("roll", "pitch", "yaw")
 GAINS = ("kp", "ki", "kd")
@@ -45,7 +48,7 @@ def prompt_float(label: str, current: float) -> float:
             print(f"  '{raw}' no es un número, probá de nuevo.")
 
 
-def prompt_gains(current: dict) -> dict:
+def prompt_gains(current: dict, current_beta: float) -> tuple:
     print("\nIngresá los nuevos valores (ENTER para mantener el actual):")
     new = {}
     for axis in AXES:
@@ -53,19 +56,22 @@ def prompt_gains(current: dict) -> dict:
         new[axis] = {}
         for g in GAINS:
             new[axis][g] = prompt_float(g, current[axis][g])
-    return new
+    print(" [Filtro complementario]")
+    new_beta = prompt_float("comp_beta (0.001-0.5)", current_beta)
+    return new, new_beta
 
 
-def gains_to_csv(g: dict) -> str:
+def gains_to_csv(g: dict, beta: float) -> str:
     vals = []
     for axis in AXES:
         for k in GAINS:
             vals.append(f"{g[axis][k]:.6f}")
+    vals.append(f"{beta:.6f}")
     return ",".join(vals)
 
 
-def send_once(host: str, port: int, gains: dict, timeout: float = 3.0) -> str:
-    line = gains_to_csv(gains) + "\n"
+def send_once(host: str, port: int, gains: dict, beta: float, timeout: float = 3.0) -> str:
+    line = gains_to_csv(gains, beta) + "\n"
     with socket.create_connection((host, port), timeout=timeout) as s:
         s.sendall(line.encode("ascii"))
         buf = b""
@@ -77,10 +83,11 @@ def send_once(host: str, port: int, gains: dict, timeout: float = 3.0) -> str:
     return buf.decode("ascii", errors="replace").strip()
 
 
-def show_gains(gains: dict) -> None:
+def show_gains(gains: dict, beta: float) -> None:
     for axis in AXES:
         g = gains[axis]
         print(f"  {axis:5s}  Kp={g['kp']:>8.4f}  Ki={g['ki']:>8.4f}  Kd={g['kd']:>8.4f}")
+    print(f"  comp_beta = {beta:.4f}")
 
 
 def main():
@@ -94,22 +101,23 @@ def main():
 
     print(f"Target: {args.host}:{args.port}")
     print("Valores por defecto (los hardcoded en main.c):")
-    show_gains(DEFAULT_GAINS)
+    show_gains(DEFAULT_GAINS, DEFAULT_COMP_BETA)
 
     current = {axis: dict(DEFAULT_GAINS[axis]) for axis in AXES}
+    current_beta = DEFAULT_COMP_BETA
 
     while True:
         try:
-            current = prompt_gains(current)
+            current, current_beta = prompt_gains(current, current_beta)
         except (EOFError, KeyboardInterrupt):
             print("\nSaliendo.")
             return 0
 
         print("\nMandando:")
-        show_gains(current)
+        show_gains(current, current_beta)
 
         try:
-            reply = send_once(args.host, args.port, current)
+            reply = send_once(args.host, args.port, current, current_beta)
         except (socket.timeout, ConnectionError, OSError) as e:
             print(f"  Error de socket: {e}")
             continue

@@ -20,7 +20,7 @@ import sys
 import tkinter as tk
 from tkinter import ttk
 
-DEFAULT_HOST = "192.168.0.12"
+DEFAULT_HOST = "192.168.0.10"
 DEFAULT_PORT = 8888
 
 # Defaults match main.c (líneas 361-371): F450 / 1400kv / 10x4.7 starting points
@@ -29,6 +29,7 @@ DEFAULT_GAINS = {
     "pitch": {"kp": 6.0, "ki": 0.0, "kd": 3.0},
     "yaw":   {"kp": 3.0, "ki": 0.0, "kd": 8.0},
 }
+DEFAULT_COMP_BETA = 0.04   # peso del DMP en el filtro complementario
 
 AXES = ("roll", "pitch", "yaw")
 GAINS = ("kp", "ki", "kd")
@@ -41,6 +42,11 @@ RANGES = {
 }
 RESOLUTION = 0.1
 SLIDER_LENGTH = 180
+
+# Filtro complementario: slider más fino, rango chico
+COMP_BETA_RANGE = (0.001, 0.2)
+COMP_BETA_RESOLUTION = 0.001
+COMP_BETA_SLIDER_LENGTH = 400
 
 SOCKET_TIMEOUT_S = 3.0
 
@@ -116,9 +122,47 @@ class PIDTuner:
 
                 self.cells[axis][gain] = (var, value_label)
 
+        # ----- Filtro complementario (fila aparte) -----
+        sep = ttk.Separator(main, orient="horizontal")
+        sep.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(12, 8))
+
+        comp_frame = ttk.Frame(main)
+        comp_frame.grid(row=6, column=0, columnspan=4, sticky="ew", padx=4)
+
+        ttk.Label(comp_frame, text="Comp β",
+                  font=("TkDefaultFont", 11, "bold")).pack(side="left", padx=(0, 12))
+
+        self.beta_var = tk.DoubleVar(value=DEFAULT_COMP_BETA)
+        self.beta_label = ttk.Label(comp_frame,
+                                    text=f"{DEFAULT_COMP_BETA:.3f}",
+                                    width=8, anchor="center",
+                                    font=("TkFixedFont", 10))
+        self.beta_label.pack(side="left", padx=(0, 8))
+
+        def on_beta_change(v):
+            try:
+                self.beta_label.config(text=f"{float(v):.3f}")
+            except ValueError:
+                pass
+
+        beta_slider = tk.Scale(comp_frame,
+                               from_=COMP_BETA_RANGE[0],
+                               to=COMP_BETA_RANGE[1],
+                               resolution=COMP_BETA_RESOLUTION,
+                               orient="horizontal",
+                               length=COMP_BETA_SLIDER_LENGTH,
+                               variable=self.beta_var,
+                               showvalue=0,
+                               command=on_beta_change)
+        beta_slider.pack(side="left", fill="x", expand=True)
+
+        ttk.Label(comp_frame,
+                  text=f"({COMP_BETA_RANGE[0]:g}–{COMP_BETA_RANGE[1]:g})",
+                  font=("TkDefaultFont", 9)).pack(side="left", padx=(8, 0))
+
         # Botones
         btn_frame = ttk.Frame(main)
-        btn_frame.grid(row=5, column=0, columnspan=4, pady=(15, 5))
+        btn_frame.grid(row=7, column=0, columnspan=4, pady=(15, 5))
 
         ttk.Button(btn_frame, text="Cargar defaults",
                    command=self._load_defaults).pack(side="left", padx=8)
@@ -136,7 +180,7 @@ class PIDTuner:
                                 text="Listo. Mové las barritas y presioná Enviar (o ENTER).",
                                 relief="sunken", anchor="w",
                                 padding=(6, 4))
-        self.status.grid(row=6, column=0, columnspan=4, sticky="ew",
+        self.status.grid(row=8, column=0, columnspan=4, sticky="ew",
                          pady=(10, 0))
 
         # Hacer que las columnas se expandan
@@ -153,6 +197,8 @@ class PIDTuner:
                 val = DEFAULT_GAINS[axis][gain]
                 v.set(val)
                 lbl.config(text=f"{val:.2f}")
+        self.beta_var.set(DEFAULT_COMP_BETA)
+        self.beta_label.config(text=f"{DEFAULT_COMP_BETA:.3f}")
         self._set_status(
             "Defaults cargados. Presioná Enviar para escribirlos al blackpill.")
 
@@ -162,13 +208,17 @@ class PIDTuner:
                 v, lbl = self.cells[axis][gain]
                 v.set(0.0)
                 lbl.config(text="0.00")
-        self._set_status("Todos los gains a 0. Cuidado: con todo en 0 no hay control.")
+        # beta NO se va a 0 porque rompería el filtro complementario.
+        # Mantenemos el valor actual.
+        self._set_status("Todos los gains a 0 (β del filtro intacto). "
+                         "Cuidado: con gains en 0 no hay control.")
 
     def _gains_csv(self) -> str:
         parts = []
         for axis in AXES:
             for k in GAINS:
                 parts.append(f"{self.cells[axis][k][0].get():.6f}")
+        parts.append(f"{self.beta_var.get():.6f}")
         return ",".join(parts)
 
     def _send(self):

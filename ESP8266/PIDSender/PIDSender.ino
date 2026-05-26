@@ -5,12 +5,13 @@
  *
  *   Python (TCP/CSV)  --WiFi-->  ESP8266  --SoftSerial 57600-->  Blackpill USART2
  *
- * UART frame (40 bytes, sólo ESP -> Blackpill):
+ * UART frame (44 bytes, sólo ESP -> Blackpill):
  *   [0..35]  : 9 floats little-endian (Kp/Ki/Kd para roll, pitch, yaw)
- *   [36..39] : CRC32 sobre los 36 primeros bytes
+ *   [36..39] : 1 float comp_filter_beta (peso del DMP en el filtro complementario)
+ *   [40..43] : CRC32 sobre los 40 primeros bytes
  *
  * TCP protocol Python -> ESP (line-terminated):
- *   "kp_roll,ki_roll,kd_roll,kp_pitch,ki_pitch,kd_pitch,kp_yaw,ki_yaw,kd_yaw"
+ *   "kp_roll,ki_roll,kd_roll,kp_pitch,ki_pitch,kd_pitch,kp_yaw,ki_yaw,kd_yaw,comp_beta"
  *
  * Respuesta ESP -> Python:
  *   "OK kp,ki,kd,..."  (echo de lo enviado)
@@ -36,8 +37,9 @@
 #define PORT_TCP        8888
 
 // ============================================================================
-static const uint8_t  TRANSMITED_BYTES   = 40;
-static const uint8_t  NUM_FLOATS         = 9;
+static const uint8_t  TRANSMITED_BYTES   = 44;
+static const uint8_t  NUM_FLOATS         = 10;  // 9 PID gains + 1 comp_filter_beta
+static const uint8_t  CRC_OFFSET         = 40;  // = NUM_FLOATS * 4
 static const uint32_t BAUDRATE_BLACKPILL = 57600;
 static const uint8_t  TX_RETRIES         = 3;
 
@@ -81,12 +83,12 @@ static uint32_t crc32_update(uint32_t crc, const uint8_t *data, size_t len)
     return ~crc;
 }
 
-// Build the 40-byte packet from 9 floats
+// Build the 44-byte packet from 10 floats (9 PID gains + comp_filter_beta)
 static void buildPacket(uint8_t out[TRANSMITED_BYTES], const float v[NUM_FLOATS])
 {
-    memcpy(out, v, NUM_FLOATS * sizeof(float));   // 36 bytes
-    uint32_t crc = crc32_update(0xFFFFFFFF, out, 36);
-    memcpy(&out[36], &crc, 4);
+    memcpy(out, v, NUM_FLOATS * sizeof(float));   // 40 bytes
+    uint32_t crc = crc32_update(0xFFFFFFFF, out, CRC_OFFSET);
+    memcpy(&out[CRC_OFFSET], &crc, 4);
 }
 
 // Forward one packet to the blackpill, with retries against SoftSerial jitter
@@ -163,7 +165,7 @@ void setup()
     tcpServer.begin();
     tcpServer.setNoDelay(true);
     Serial.printf("TCP server listening on port %u\n", PORT_TCP);
-    Serial.println("Format: 9 floats CSV (kp_roll,ki_roll,kd_roll,...)");
+    Serial.println("Format: 10 floats CSV (kp/ki/kd roll, kp/ki/kd pitch, kp/ki/kd yaw, comp_beta)");
 }
 
 // ============================================================================

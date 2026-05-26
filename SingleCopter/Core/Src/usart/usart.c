@@ -4,9 +4,10 @@
  *  Created on: Jun 1, 2025
  *      Author: nicor
  *
- * Protocolo UART (40 bytes):
+ * Protocolo UART (44 bytes):
  *   [0..35]  : 9 floats (Kp/Ki/Kd para roll, pitch, yaw)
- *   [36..39] : CRC32 sobre los 36 primeros bytes
+ *   [36..39] : 1 float comp_filter_beta (peso del DMP en el filtro complementario)
+ *   [40..43] : CRC32 sobre los 40 primeros bytes
  *
  * Aplica los nuevos PIDs sólo si el quad está disarmed (start != 0).
  * En vuelo se ignoran los paquetes.
@@ -18,9 +19,10 @@
 #include <string.h>
 
 extern uint8_t rx_buffer[TRANSMITED_BYTES];
-extern float   received_values[10];
+extern float   received_values[NUM_FLOATS_RX];
 extern PIDController pid_roll, pid_pitch, pid_yaw;
 extern uint8_t start;   // 0 = armed, 1 = disarmed (definido en main.c)
+extern float comp_filter_beta;   // peso del DMP en el complementario, 0..1
 
 
 static uint32_t crc32_update(uint32_t crc, const uint8_t *data, size_t len)
@@ -51,11 +53,12 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
         return;
     }
 
-    memcpy(received_values, rx_buffer, TRANSMITED_BYTES);
+    // Copiar solo los 10 floats al array de trabajo (no el CRC)
+    memcpy(received_values, rx_buffer, sizeof(received_values));
 
-    uint32_t check_sum_c = crc32_update(0xFFFFFFFF, rx_buffer, TRANSMITED_BYTES - 4);
+    uint32_t check_sum_c = crc32_update(0xFFFFFFFF, rx_buffer, CRC_OFFSET);
     uint32_t check_sum_r;
-    memcpy(&check_sum_r, &rx_buffer[36], 4);
+    memcpy(&check_sum_r, &rx_buffer[CRC_OFFSET], 4);
 
     if (check_sum_r != check_sum_c) {
         HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
@@ -76,6 +79,14 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
                   SAMPLE_TIME_S,
                   PID_LIM_MIN_INT_YAW, PID_LIM_MAX_INT_YAW,
                   PID_LIM_MIN_YAW,     PID_LIM_MAX_YAW);
+
+    /* Bound check del beta del filtro complementario antes de aplicarlo.
+     * beta=0 → puro gyro (drift sin corregir). beta=1 → puro DMP (ruido total).
+     * Rango razonable: [0.001, 0.5]. */
+    float beta = received_values[9];
+    if (beta >= 0.001f && beta <= 0.5f) {
+        comp_filter_beta = beta;
+    }
 
     resetPID(&pid_roll);
     resetPID(&pid_pitch);
